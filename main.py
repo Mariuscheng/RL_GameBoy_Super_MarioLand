@@ -40,14 +40,13 @@ model.summary()
 
 
 def generate_data_one_episode():
-    '''生成单次游戏的训练数据'''
     x, y, score = [], [], 0
     state = env.reset()
     while True:
         action = random.randrange(0, 8)
         x.append(state)
-        y.append([1, 0] if action == 0 else [0, 1])  # 记录数据
-        state, reward, done, _ = env.step(action)  # 执行动作
+        y.append([1, 0] if action == 0 else [0, 1])  
+        state, reward, done, _ = env.step(action) 
         score += reward
         if done:
             break
@@ -55,7 +54,6 @@ def generate_data_one_episode():
 
 
 def generate_training_data(expected_score=100):
-    '''# 生成N次游戏的训练数据，并进行筛选，选择 > 100 的数据作为训练集'''
     data_X, data_Y, scores = [], [], []
     for i in range(20000):
         x, y, score = generate_data_one_episode()
@@ -72,7 +70,6 @@ model.save('1943-Nes.h5')
 del model
 
 model = load_model('1943-Nes.h5')
-# 環境の生成 (1)
 ep = 10000
 ep += ep
 for i in range(ep):
@@ -80,11 +77,11 @@ for i in range(ep):
     score = 100
     while True:
         time.sleep(0.01)
-        env.render()  # 显示画面
-        action = env.action_space.sample()  # 预测动作
-        state, reward, done, info = env.step(action)  # 执行这个动作
-        score += reward  # 每回合的得分
-        if done:  # 游戏结束
-            print('using nn, score: ', score)  # 打印分数
+        env.render()  
+        action = env.action_space.sample() 
+        state, reward, done, info = env.step(action)  
+        score += reward  
+        if done: 
+            print('using nn, score: ', score) 
             break
 env.close()
