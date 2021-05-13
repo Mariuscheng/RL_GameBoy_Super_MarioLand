@@ -31,7 +31,7 @@ dense_1 (Dense)              (None, 1)                 10
 Total params: 199
 Trainable params: 199
 Non-trainable params: 0
-_________________________________________________________________
+________________________________________________________________
 using nn, score:  7600.0
 using nn, score:  8100.0
 using nn, score:  17600.0
