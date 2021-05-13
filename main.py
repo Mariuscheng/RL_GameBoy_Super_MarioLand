@@ -14,7 +14,6 @@ import random
 
 env = retro.make(game='1943-Nes')
 
-# 生成虚拟数据
 x_train = np.random.random((1000, 20))
 y_train = np.random.randint(1, size=(1000, 1))
 x_test = np.random.random((100, 20))
