@@ -26,13 +26,11 @@ model.add(Dense(3))
 model.add(Dense(1))
 
 sgd = optimizers.SGD(lr=0.01, decay=1e-6, momentum=0.9, nesterov=True)
-model.compile(loss='mean_squared_error',
-              optimizer='sgd',
-              metrics=['accuracy'])
 
-model.fit(x_train, y_train,
-          epochs=10,
-          batch_size=256)
+model.compile(loss='mean_squared_error', optimizer='sgd', metrics=['accuracy'])
+
+model.fit(x_train, y_train, epochs=10, batch_size=256)
+
 score = model.evaluate(x_test, y_test, batch_size=256)
 
 model.summary()
