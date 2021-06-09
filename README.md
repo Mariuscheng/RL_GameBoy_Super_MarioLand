@@ -1,4 +1,4 @@
-# RL-1943-Nes
+# RL-BubbleBobble-Nes
 Epoch 1/10
 4/4 [==============================] - 0s 665us/step - loss: 2.4912 - accuracy: 0.5580
 
