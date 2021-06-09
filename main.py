@@ -1,84 +1,79 @@
-import gym
 import retro
-import time
-import numpy as np
-import tensorflow as tf
-from tensorflow import keras
-from keras.models import Sequential
-from keras.layers import Dense, Dropout, Activation, Flatten
-from keras.layers import Conv2D, MaxPooling2D
-from keras.optimizers import SGD
-from keras.models import load_model
-from keras import optimizers
+import gym
 import random
+import numpy as np
+import gym.spaces
 
-env = retro.make(game='1943-Nes')
+from stable_baselines3 import A2C
+from stable_baselines3.common.vec_env import DummyVecEnv,SubprocVecEnv
+from stable_baselines3.common.callbacks import CheckpointCallback
+from stable_baselines3.common.evaluation import evaluate_policy
+from stable_baselines3.common.env_util import make_vec_env
+from stable_baselines3.common.utils import set_random_seed
 
-x_train = np.random.random((1000, 20))
-y_train = np.random.randint(1, size=(1000, 1))
-x_test = np.random.random((100, 20))
-y_test = np.random.randint(1, size=(100, 1))
+def make_env(game, rank, seed=0):
+    """
+    Utility function for multiprocessed env.
 
-model = Sequential()
-
-model.add(Dense(9))
-model.add(Dense(3))
-model.add(Dense(1))
-
-sgd = optimizers.SGD(lr=0.01, decay=1e-6, momentum=0.9, nesterov=True)
-
-model.compile(loss='mean_squared_error', optimizer='sgd', metrics=['accuracy'])
-
-model.fit(x_train, y_train, epochs=10, batch_size=256)
-
-score = model.evaluate(x_test, y_test, batch_size=256)
-
-model.summary()
+    :param env_id: (str) the environment ID
+    :param num_env: (int) the number of environments you wish to have in subprocesses
+    :param seed: (int) the inital seed for RNG
+    :param rank: (int) index of the subprocess
+    """
+    def _init():
+        env = retro.make(game)
+        env.seed(seed + rank)
+        return env
+    set_random_seed(seed)
+    return _init
 
 
-def generate_data_one_episode():
-    x, y, score = [], [], 0
-    state = env.reset()
+class Discretizer(gym.ActionWrapper):
+
+    def __init__(self, env):
+        super().__init__(env)
+        buttons = ['B', None, 'SELECT', 'START', 'UP', 'DOWN', 'LEFT', 'RIGHT', 'A']
+        actions = [['B'], ['A'], ['UP'], ['DOWN'], ['LEFT'], ['RIGHT'], [None]]
+        self._actions=[]
+        for action in actions:
+            arr = np.array([False] * 12)
+            for button in action:
+                arr[buttons.index(button)] = True
+            self._actions.append(arr)
+        self.action_space = gym.spaces.Discrete(len(self._actions))
+
+    def action(self, a):
+        return self._actions[a].copy()
+
+
+checkpoint_callback = CheckpointCallback(save_freq=1000, save_path='./logs/', name_prefix='rl_model')
+    
+
+if __name__ == '__main__':
+
+    game="BubbleBobble-Nes"
+    n_cpus = 6
+
+    env = Discretizer(retro.make(game, scenario="training"))
+    env = SubprocVecEnv([make_env(game, i) for i in range(n_cpus)])
+
+    #env = DummyVecEnv([lambda:env])
+
+    model = A2C("CnnpPolicy", env, verbose=1)
+    model.learn(total_timesteps=25000, callback=checkpoint_callback)
+
+    model.save("A2C-BubbleBobble")
+
+    del model # remove to demonstrate saving and loading
+
+    model = A2C.load("A2C-BubbleBobble")
+
+    model.set_env(env)
+
+    obs = env.reset()
+
     while True:
-        action = random.randrange(0, 8)
-        x.append(state)
-        y.append([1, 0] if action == 0 else [0, 1])  
-        state, reward, done, _ = env.step(action) 
-        score += reward
-        if done:
-            break
-    return x, y, score
-
-
-def generate_training_data(expected_score=100):
-    data_X, data_Y, scores = [], [], []
-    for i in range(20000):
-        x, y, score = generate_data_one_episode()
-        if score > expected_score:
-            data_X += x
-            data_Y += y
-            scores.append(score)
-    print('dataset size: {}, max score: {}'.format(len(data_X), max(scores)))
-    return np.array(data_X), np.array(data_Y)
-
-
-model.save('1943-Nes.h5')
-
-del model
-
-model = load_model('1943-Nes.h5')
-ep = 10000
-ep += ep
-for i in range(ep):
-    state = env.reset()
-    score = 100
-    while True:
-        time.sleep(0.01)
-        env.render()  
-        action = env.action_space.sample() 
-        state, reward, done, info = env.step(action)  
-        score += reward  
-        if done: 
-            print('using nn, score: ', score) 
-            break
-env.close()
+        action, _states = model.predict(obs)
+        obs, rewards, dones, info = env.step(action)
+        env.render()
+   
