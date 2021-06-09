@@ -7,7 +7,6 @@ import gym.spaces
 from stable_baselines3 import A2C
 from stable_baselines3.common.vec_env import DummyVecEnv,SubprocVecEnv
 from stable_baselines3.common.callbacks import CheckpointCallback
-from stable_baselines3.common.evaluation import evaluate_policy
 from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.utils import set_random_seed
 
