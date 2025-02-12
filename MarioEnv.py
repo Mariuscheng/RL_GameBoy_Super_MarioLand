@@ -18,6 +18,8 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 
+import sys
+
 # set up matplotlib
 is_ipython = 'inline' in matplotlib.get_backend()
 if is_ipython:
@@ -208,8 +210,7 @@ mario.start_game()
 state, info = env.reset()
 
 
-
-state = torch.tensor(state, dtype=torch.float32).to(device)
+state = torch.from_numpy(state).to(device)
 
 print(state)
 # tensor([339, 339, 339, 339, 339, 339, 339, 339, 339, 339, 339, 339, 339, 339,
@@ -235,10 +236,12 @@ print(state)
 #         352, 352, 352, 352, 352, 352, 352, 352, 352, 352, 352, 352, 352, 352,
 #         352, 352, 352, 352, 352, 352, 353, 353, 353, 353, 353, 353, 353, 353,
 #         353, 353, 353, 353, 353, 353, 353, 353, 353, 353, 353, 353],
-#        device='cuda:0', dtype=torch.uint32)
+#        device='cuda:0', dtype=torch.int32)
+
+
 
  # Get the total 320 number of elements in the tensor
-print("flatten observation space :", env.observation_space.shape) #(320, )
+print("flatten observation space :", torch.tensor(env.observation_space.shape)) #(320, )
 
 
 print("action_space.sample" ,env.action_space.sample()) #1
@@ -267,10 +270,11 @@ class DQN(nn.Module):
 
     def __init__(self, n_observations, n_actions):
         super(DQN, self).__init__()
-        self.layer1 = nn.Linear(n_observations, 1024)
-        self.layer2 = nn.Linear(1024, 1024)
+        self.layer1 = nn.Linear(n_observations, 512)
+        self.layer2 = nn.Linear(512, 1024)
         self.layer3 = nn.Linear(1024, 1024)
-        self.layer4 = nn.Linear(1024, n_actions)
+        self.layer4 = nn.Linear(1024, 64)
+        self.layer5 = nn.Linear(64, n_actions)
 
     # Called with either one element to determine next action, or a batch
     # during optimization. Returns tensor([[left0exp,right0exp]...]).
@@ -278,7 +282,8 @@ class DQN(nn.Module):
         x = F.relu(self.layer1(x))
         x = F.relu(self.layer2(x))
         x = F.relu(self.layer3(x))
-        return self.layer4(x)
+        x = F.relu(self.layer4(x))
+        return self.layer5(x)
 
 
 BATCH_SIZE = 128
@@ -298,6 +303,11 @@ print("n_observations :", n_observations) #320
 
 policy_net = DQN(n_observations, n_actions).to(device)
 target_net = DQN(n_observations, n_actions).to(device)
+
+print(f"Model structure: {policy_net}\n\n")
+
+for name, param in policy_net.named_parameters():
+    print(f"Layer: {name} | Size: {param.size()} | Values : {param[:2]} \n")
 
 target_net.load_state_dict(policy_net.state_dict())
 
@@ -421,55 +431,47 @@ if torch.cuda.is_available() or torch.backends.mps.is_available():
 else:
     num_episodes = 50
 
+mario_pos = pyboy.get_sprite_by_tile_identifier([0, 1, 16, 17])
+Big_mario = pyboy.get_sprite_by_tile_identifier([33, 32, 49, 48])
+flower = pyboy.get_sprite_by_tile_identifier([146, 147])
+flying_1 = pyboy.get_sprite_by_tile_identifier([160, 161, 176, 177])
+bee = pyboy.get_sprite_by_tile_identifier([192, 193, 208, 209])
+turle = pyboy.get_sprite_by_tile_identifier([150, 151])
+mushroom = pyboy.get_sprite_by_tile_identifier([131])
+
 for i_episode in range(num_episodes):
     # Initialize the environment and get its state
     state, info = env.reset()
     
     mario.set_lives_left(10)
     
-    mushroom = pyboy.get_sprite_by_tile_identifier([131])  
-    mario_pos = pyboy.get_sprite_by_tile_identifier([8, 9, 24, 25])
-    Big_mario = pyboy.get_sprite_by_tile_identifier([33, 32, 49, 48])
-    flower = pyboy.get_sprite_by_tile_identifier([146, 147])
-    flying_1 = pyboy.get_sprite_by_tile_identifier([160, 161, 176, 177])
-    bee = pyboy.get_sprite_by_tile_identifier([192, 193, 208, 209])
-    Goomba = pyboy.get_sprite_by_tile_identifier([144])
-    turle = pyboy.get_sprite_by_tile_identifier([150, 151])
-    
     mario_score = mario.score
     mario_coins = mario.coins
+    mario_lives = mario.lives_left
     
-    
+    Goomba = pyboy.memory[0XD100] == 0
+    flatten_Goomba = pyboy.memory[0XD100] == 1
+    if Goomba is flatten_Goomba:
+        mario_score = mario_score + 100
+       
+    Nokobon = pyboy.memory[0XD100] == 4
+    Nokobon_bomb = pyboy.memory[0XD100] == 5
+    if Nokobon is Nokobon_bomb:
+        mario_score = mario_score + 100
+            
+    # Powerup Status  
+    Powerup_Status = pyboy.memory[0xFF99]
+    if Powerup_Status == 0:
+        mario_score = mario_score + 0
+    elif Powerup_Status == 1:
+        mario_score = mario_score + 1000
+        
     state = torch.tensor(state, dtype=torch.float32, device=device).unsqueeze(0)
     for t in count():
         action = select_action(state)
         observation, reward, terminated, truncated, _ = env.step(action.item())
-        
-        
-        Tatol_coins = bool(mario_coins + 1)
-        if Tatol_coins == True:
-            mario_score = mario_score + 100
-        
-        Die = bool(mario.lives_left - 1)
-        if Die == True:
-            mario_score = mario_score + 0 
+        done = terminated or truncated
             
-        # something move
-        move_thing = pyboy.memory[0XD103]
-        if move_thing == 0:
-            mario_score = mario_score + 100
-            
-        # Powerup Status  
-        Powerup_Status = pyboy.memory[0xFF99]
-        if Powerup_Status == 0:
-            mario_score = mario_score + 0
-        
-        if mario.lives_left == 0:
-            mario.reset_game()
-            break
-            
-        
-
         if terminated == True:
             next_state = None
         else:
@@ -484,10 +486,13 @@ for i_episode in range(num_episodes):
         
         reward = mario.score
         reward = torch.tensor([reward], device=device)
-        done = terminated or truncated
         
-        terminated = bool(mario.level_progress >= 2601)
-        goal = done
+        
+        truncated = bool(mario.level_progress >= 2601)
+        if truncated == True:
+            mario_score = max(0, mario_score)
+            print("level complete")
+            sys.exit()
 
         # Perform one step of the optimization (on the policy network)
         optimize_model()
@@ -503,6 +508,10 @@ for i_episode in range(num_episodes):
         if done:
             episode_durations.append(t + 1)
             plot_durations()
+            break
+        
+        if mario.lives_left == 0:
+            mario.reset_game()
             break
 
 print('Complete')
