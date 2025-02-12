@@ -241,7 +241,7 @@ print(state)
 
 
  # Get the total 320 number of elements in the tensor
-print("flatten observation space :", torch.tensor(env.observation_space.shape)) #(320, )
+print("flatten observation space :", torch.tensor(env.observation_space.shape)) #tensor([320])
 
 
 print("action_space.sample" ,env.action_space.sample()) #1
