@@ -321,7 +321,7 @@ print(target_net)
 steps_done = 0
 
 
-def select_action(observation):
+def select_action(state):
     global steps_done
     sample = random.random()
     eps_threshold = EPS_END + (EPS_START - EPS_END) * \
@@ -332,7 +332,7 @@ def select_action(observation):
             # t.max(1) will return the largest column value of each row.
             # second column on max result is index of where max element was
             # found, so we pick action with the larger expected reward.
-            return policy_net(observation).max(1).indices.view(1, 1)
+            return policy_net(state).max(1).indices.view(1, 1)
     else:
         return torch.tensor([[env.action_space.sample()]], device=device, dtype=torch.long)
 
