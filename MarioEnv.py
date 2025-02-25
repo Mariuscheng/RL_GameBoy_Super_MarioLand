@@ -20,10 +20,10 @@ import torch.nn.functional as F
 
 import sys
 
-# set up matplotlib
-is_ipython = 'inline' in matplotlib.get_backend()
-if is_ipython:
-    from IPython import display
+# # set up matplotlib
+# is_ipython = 'inline' in matplotlib.get_backend()
+# if is_ipython:
+#     from IPython import display
 
 plt.ion()
 
@@ -207,6 +207,8 @@ env = FlattenObservation(env)
 mario = pyboy.game_wrapper
 mario.start_game()
 
+# mario.game_area_mapping(pyboy.game_wrapper.mapping_minimal, 0)
+
 state, info = env.reset()
 
 
@@ -241,7 +243,7 @@ print(state)
 
 
  # Get the total 320 number of elements in the tensor
-print("flatten observation space :", torch.tensor(env.observation_space.shape)) #tensor([320])
+print("flatten observation space :", torch.tensor(env.observation_space.shape)) #(320, )
 
 
 print("action_space.sample" ,env.action_space.sample()) #1
@@ -271,10 +273,20 @@ class DQN(nn.Module):
     def __init__(self, n_observations, n_actions):
         super(DQN, self).__init__()
         self.layer1 = nn.Linear(n_observations, 512)
-        self.layer2 = nn.Linear(512, 1024)
-        self.layer3 = nn.Linear(1024, 1024)
-        self.layer4 = nn.Linear(1024, 64)
-        self.layer5 = nn.Linear(64, n_actions)
+        self.layer2 = nn.Linear(512, 256)
+        self.layer3 = nn.Linear(256, 128)
+        self.layer4 = nn.Linear(128, n_actions)
+        self.init_weights()
+        
+    def init_weights(self):
+        torch.nn.init.xavier_uniform_(self.layer1.weight)
+        torch.nn.init.xavier_uniform_(self.layer2.weight)
+        torch.nn.init.xavier_uniform_(self.layer3.weight)
+        torch.nn.init.xavier_uniform_(self.layer4.weight)
+        print("Layer1 weights:", self.layer1.weight)
+        print("Layer2 weights:", self.layer2.weight)
+        print("Layer3 weights:", self.layer3.weight)
+        print("Layer3 weights:", self.layer4.weight)
 
     # Called with either one element to determine next action, or a batch
     # during optimization. Returns tensor([[left0exp,right0exp]...]).
@@ -282,89 +294,77 @@ class DQN(nn.Module):
         x = F.relu(self.layer1(x))
         x = F.relu(self.layer2(x))
         x = F.relu(self.layer3(x))
-        x = F.relu(self.layer4(x))
-        return self.layer5(x)
+        return self.layer4(x)
+   
 
 
-BATCH_SIZE = 128
+BATCH_SIZE = 16
 GAMMA = 0.99
-EPS_START = 0.9
+EPS_START = 1.0
 EPS_END = 0.05
 EPS_DECAY = 1000
 TAU = 0.005
-LR = 1e-4
+LR = 0.0001
+target_update_freq = 1000
 
 # Get number of actions from gym action space
 n_actions = env.action_space.n
 print("n_actions :", n_actions) #14
 
-n_observations = env.observation_space.shape[0]
+n_observations = torch.tensor(env.observation_space.shape)
 print("n_observations :", n_observations) #320
+
+channel = n_observations.shape
+print("n_observations chennel :", channel)
 
 policy_net = DQN(n_observations, n_actions).to(device)
 target_net = DQN(n_observations, n_actions).to(device)
 
 print(f"Model structure: {policy_net}\n\n")
+print("policy_net :", policy_net)
+print("target_net :", target_net)
 
 for name, param in policy_net.named_parameters():
     print(f"Layer: {name} | Size: {param.size()} | Values : {param[:2]} \n")
 
 target_net.load_state_dict(policy_net.state_dict())
+target_net.eval()
 
-optimizer = optim.AdamW(policy_net.parameters(), lr=LR, amsgrad=True)
+optimizer = torch.optim.SGD(policy_net.parameters(), lr=LR, momentum=0.9)
 memory = ReplayMemory(10000)
 
 
-print(policy_net)
-print(target_net)
+print(optimizer)
 
-steps_done = 0
+# steps_done = 0
+
+# def select_action(state):
+#     global steps_done
+#     sample = random.random()
+#     eps_threshold = EPS_END + (EPS_START - EPS_END) * \
+#         math.exp(-1. * steps_done / EPS_DECAY)
+#     steps_done += 1
+#     if sample > eps_threshold:
+#         with torch.no_grad():
+#             # t.max(1) will return the largest column value of each row.
+#             # second column on max result is index of where max element was
+#             # found, so we pick action with the larger expected reward.
+#             return policy_net(state).max(1).indices.view(1, 1)
+#     else:
+#         return torch.tensor([[env.action_space.sample()]], device=device, dtype=torch.long)
 
 
-def select_action(state):
-    global steps_done
-    sample = random.random()
-    eps_threshold = EPS_END + (EPS_START - EPS_END) * \
-        math.exp(-1. * steps_done / EPS_DECAY)
-    steps_done += 1
-    if sample > eps_threshold:
-        with torch.no_grad():
-            # t.max(1) will return the largest column value of each row.
-            # second column on max result is index of where max element was
-            # found, so we pick action with the larger expected reward.
-            return policy_net(state).max(1).indices.view(1, 1)
-    else:
+
+def select_action(state, EPS_START):
+    if random.random() < EPS_START:
         return torch.tensor([[env.action_space.sample()]], device=device, dtype=torch.long)
+    else: 
+        state = torch.FloatTensor(state).unsqueeze(0)
+        q_values = policy_net(state)
+        return torch.argmax(q_values).item()
 
 
-
-episode_durations = []
-
-
-def plot_durations(show_result=False):
-    plt.figure(1)
-    durations_t = torch.tensor(episode_durations, dtype=torch.float)
-    if show_result:
-        plt.title('Result')
-    else:
-        plt.clf()
-        plt.title('Training...')
-    plt.xlabel('Episode')
-    plt.ylabel('Duration')
-    plt.plot(durations_t.numpy())
-    # Take 100 episode averages and plot them too
-    if len(durations_t) >= 100:
-        means = durations_t.unfold(0, 100, 1).mean(1).view(-1)
-        means = torch.cat((torch.zeros(99), means))
-        plt.plot(means.numpy())
-
-    plt.pause(0.001)  # pause a bit so that plots are updated
-    if is_ipython:
-        if not show_result:
-            display.display(plt.gcf())
-            display.clear_output(wait=True)
-        else:
-            display.display(plt.gcf())
+    
             
 
 def optimize_model():
@@ -387,6 +387,7 @@ def optimize_model():
     )
     
     state_batch = torch.cat(batch.state).to(device)
+
     action_batch = torch.cat(batch.action).to(device).view(BATCH_SIZE, 1)
 
     # Convert rewards to tensor and add an extra dimension
@@ -407,9 +408,14 @@ def optimize_model():
     # state value or 0 in case the state was final.
     next_state_values = torch.zeros(BATCH_SIZE, device=device)
     with torch.no_grad():
-        next_state_values[non_final_mask] = target_net(non_final_next_states).max(1)[0]
+         # Use policy_net to select best action indices
+        best_actions = policy_net(non_final_next_states).max(1)[1]
+        # next_state_values[non_final_mask] = target_net(non_final_next_states).max(1)[0]
+        # Evaluate these actions using target_net
+        next_state_values[non_final_mask] = target_net(non_final_next_states).gather(1, best_actions.unsqueeze(1)).squeeze()
     # Compute the expected Q values
     expected_state_action_values = (next_state_values * GAMMA) + reward_batch
+        
     
     # Ensure expected_state_action_values has an extra dimension for compatibility with state_action_values
     # expected_state_action_values = expected_state_action_values.unsqueeze(1)
@@ -417,6 +423,8 @@ def optimize_model():
     # Compute Huber loss with matching shapes
     criterion = nn.SmoothL1Loss()
     loss = criterion(state_action_values, expected_state_action_values)
+    
+    # print(f'Loss: {loss.item()}')
 
     # Optimize the model
     optimizer.zero_grad()
@@ -431,45 +439,73 @@ if torch.cuda.is_available() or torch.backends.mps.is_available():
 else:
     num_episodes = 50
 
-mario_pos = pyboy.get_sprite_by_tile_identifier([0, 1, 16, 17])
-Big_mario = pyboy.get_sprite_by_tile_identifier([33, 32, 49, 48])
-flower = pyboy.get_sprite_by_tile_identifier([146, 147])
-flying_1 = pyboy.get_sprite_by_tile_identifier([160, 161, 176, 177])
-bee = pyboy.get_sprite_by_tile_identifier([192, 193, 208, 209])
-turle = pyboy.get_sprite_by_tile_identifier([150, 151])
-mushroom = pyboy.get_sprite_by_tile_identifier([131])
+rewards_per_episode = []
+steps_done = 0
+
+# Goomba = pyboy.get_sprite_by_tile_identifier([144])
 
 for i_episode in range(num_episodes):
     # Initialize the environment and get its state
     state, info = env.reset()
     
+    episode_reward = 0
+    
     mario.set_lives_left(10)
+    
+    selected_mario_pos = torch.tensor([[244, 245, 264, 265]])
+    mario_pos = state[selected_mario_pos]
     
     mario_score = mario.score
     mario_coins = mario.coins
+    
     mario_lives = mario.lives_left
     
     Goomba = pyboy.memory[0XD100] == 0
     flatten_Goomba = pyboy.memory[0XD100] == 1
-    if Goomba is flatten_Goomba:
-        mario_score = mario_score + 100
-       
+    
     Nokobon = pyboy.memory[0XD100] == 4
     Nokobon_bomb = pyboy.memory[0XD100] == 5
-    if Nokobon is Nokobon_bomb:
-        mario_score = mario_score + 100
-            
+    
     # Powerup Status  
     Powerup_Status = pyboy.memory[0xFF99]
-    if Powerup_Status == 0:
-        mario_score = mario_score + 0
-    elif Powerup_Status == 1:
-        mario_score = mario_score + 1000
+    Die = 4 < pyboy.memory[0XFFA6] < 144
+    lost_live = bool(mario_lives - 1)
+    
         
     state = torch.tensor(state, dtype=torch.float32, device=device).unsqueeze(0)
     for t in count():
-        action = select_action(state)
+        action = select_action(state, EPS_START)
         observation, reward, terminated, truncated, _ = env.step(action.item())
+        
+        if len(mario_pos.shape) == 0:
+            mario_score = mario_score + 0
+        
+        # Calculate life loss and apply penalty if needed
+        prev_mario_lives = mario.lives_left
+        Tatol_coins = bool(mario_coins + 1)  # Existing coin logic
+        if Tatol_coins:
+            mario_score += 100
+     
+        if Die == True:
+            mario_score += 0
+        
+        # if lost_live == True:
+        #     mario_score += 0
+            
+        if Goomba is flatten_Goomba:
+            mario_score = mario_score + 100
+            
+        if Nokobon is Nokobon_bomb:
+            mario_score = mario_score + 100
+        
+        if Nokobon is Nokobon_bomb:
+            mario_score = mario_score + 100
+            
+        if Powerup_Status == 0:
+            mario_score = mario_score + 0
+        elif Powerup_Status == 2:
+            mario_score = mario_score + 1000
+        
         done = terminated or truncated
             
         if terminated == True:
@@ -478,13 +514,11 @@ for i_episode in range(num_episodes):
             next_state = torch.tensor(observation, dtype=torch.float32, device=device).unsqueeze(0)
 
         # Store the transition in memory
-        # memory.push(state, action, next_state, reward)
         memory.push(state, action, next_state, reward)
 
         # Move to the next state
         state = next_state
-        
-        reward = mario.score
+        mario_score += reward
         reward = torch.tensor([reward], device=device)
         
         
@@ -505,16 +539,21 @@ for i_episode in range(num_episodes):
             target_net_state_dict[key] = policy_net_state_dict[key]*TAU + target_net_state_dict[key]*(1-TAU)
         target_net.load_state_dict(target_net_state_dict)
 
-        if done:
-            episode_durations.append(t + 1)
-            plot_durations()
-            break
+        steps_done += 1
         
         if mario.lives_left == 0:
             mario.reset_game()
             break
+        
+    # Decay epsilon
+    EPS_START = max(EPS_END, EPS_DECAY * EPS_START)
+    
+    rewards_per_episode.append(episode_reward)
 
-print('Complete')
-plot_durations(show_result=True)
-plt.ioff()
+# Plotting the rewards per episode
+
+plt.plot(rewards_per_episode)
+plt.xlabel('Episode')
+plt.ylabel('Reward')
+plt.title('DQN on Mario Land')
 plt.show()
