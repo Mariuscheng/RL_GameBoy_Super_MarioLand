@@ -19,19 +19,18 @@ import torch.optim as optim
 import torch.nn.functional as F
 
 import sys
+from PIL import Image
 
-# # set up matplotlib
-# is_ipython = 'inline' in matplotlib.get_backend()
-# if is_ipython:
-#     from IPython import display
-
-plt.ion()
+from cyberbrain import trace
 
 device = torch.device(
     "cuda" if torch.cuda.is_available() else
     # "mps" if torch.backends.mps.is_available() else
     "cpu"
 )
+
+
+
 
 class Actions(Enum):
     NOOP = 0
@@ -71,7 +70,9 @@ class Actions(Enum):
 # A_FUNCTION_ACTIONS = [A_FUNCTION.NOOP, A_FUNCTION.BUTTON_A]
 # B_FUNCTION_ACTIONS = [B_FUNCTION.NOOP, B_FUNCTION.BUTTON_B]
 
+
 class MarioEnv(gym.Env):
+    @trace
     def __init__(self, pyboy):
         # super().__init__(PyBoy)
         self.pyboy = pyboy
@@ -87,6 +88,7 @@ class MarioEnv(gym.Env):
         self.observation_space = Box(low=0, high=255, shape=(16, 20), dtype=np.int32) # 假設距離的值範圍是 0-255
         
 
+    @trace
     def step(self, action):
         assert self.action_space.contains(action), "%r (%s) invalid" % (action, type(action))
         
@@ -169,6 +171,7 @@ class MarioEnv(gym.Env):
 
         return state, reward, terminated, truncated, info
 
+    @trace
     def reset(self, seed=42, options=None):
         super().reset(seed=seed)
         #self.pyboy.game_wrapper.reset_game()
@@ -179,23 +182,20 @@ class MarioEnv(gym.Env):
             
         return state, info
 
+    @trace
     def render(self):
         self.pyboy.tick()
 
+    @trace
     def close(self):
         self.pyboy.stop()
 
+    @trace
     def _get_obs(self):
         return self.pyboy.game_area()
         
 
 
-# if GPU is to be used
-device = torch.device(
-    "cuda" if torch.cuda.is_available() else
-    "mps" if torch.backends.mps.is_available() else
-    "cpu"
-)
 
     
 pyboy = PyBoy("rom.gb", window="SDL2") 
@@ -204,8 +204,10 @@ env = MarioEnv(pyboy)
 # flatten the array
 env = FlattenObservation(env)
 
+
 mario = pyboy.game_wrapper
-mario.start_game()
+
+mario.start_game(world_level=(1,1))
 
 # mario.game_area_mapping(pyboy.game_wrapper.mapping_minimal, 0)
 
@@ -240,9 +242,7 @@ print(state)
 #         353, 353, 353, 353, 353, 353, 353, 353, 353, 353, 353, 353],
 #        device='cuda:0', dtype=torch.int32)
 
-
-
- # Get the total 320 number of elements in the tensor
+# Get the total 320 number of elements in the tensor
 print("flatten observation space :", torch.tensor(env.observation_space.shape)) #(320, )
 
 
@@ -276,17 +276,6 @@ class DQN(nn.Module):
         self.layer2 = nn.Linear(512, 256)
         self.layer3 = nn.Linear(256, 128)
         self.layer4 = nn.Linear(128, n_actions)
-        self.init_weights()
-        
-    def init_weights(self):
-        torch.nn.init.xavier_uniform_(self.layer1.weight)
-        torch.nn.init.xavier_uniform_(self.layer2.weight)
-        torch.nn.init.xavier_uniform_(self.layer3.weight)
-        torch.nn.init.xavier_uniform_(self.layer4.weight)
-        print("Layer1 weights:", self.layer1.weight)
-        print("Layer2 weights:", self.layer2.weight)
-        print("Layer3 weights:", self.layer3.weight)
-        print("Layer3 weights:", self.layer4.weight)
 
     # Called with either one element to determine next action, or a batch
     # during optimization. Returns tensor([[left0exp,right0exp]...]).
@@ -295,10 +284,8 @@ class DQN(nn.Module):
         x = F.relu(self.layer2(x))
         x = F.relu(self.layer3(x))
         return self.layer4(x)
-   
 
-
-BATCH_SIZE = 16
+BATCH_SIZE = 32
 GAMMA = 0.99
 EPS_START = 1.0
 EPS_END = 0.05
@@ -314,8 +301,8 @@ print("n_actions :", n_actions) #14
 n_observations = torch.tensor(env.observation_space.shape)
 print("n_observations :", n_observations) #320
 
-channel = n_observations.shape
-print("n_observations chennel :", channel)
+channel = state.ndim
+print("n_observations chennel :", channel) #1
 
 policy_net = DQN(n_observations, n_actions).to(device)
 target_net = DQN(n_observations, n_actions).to(device)
@@ -452,24 +439,22 @@ for i_episode in range(num_episodes):
     
     mario.set_lives_left(10)
     
-    selected_mario_pos = torch.tensor([[244, 245, 264, 265]])
-    mario_pos = state[selected_mario_pos]
+    # selected_mario_pos = torch.tensor([[244, 245, 264, 265]])
+    # mario_pos = state[selected_mario_pos]
     
     mario_score = mario.score
     mario_coins = mario.coins
     
     mario_lives = mario.lives_left
     
-    Goomba = pyboy.memory[0XD100] == 0
-    flatten_Goomba = pyboy.memory[0XD100] == 1
+    Goomba = pyboy.memory[0XD100] == 0 ; flatten_Goomba = pyboy.memory[0XD100] == 1
     
-    Nokobon = pyboy.memory[0XD100] == 4
-    Nokobon_bomb = pyboy.memory[0XD100] == 5
+    Nokobon = pyboy.memory[0XD100] == 4 ; Nokobon_bomb = pyboy.memory[0XD100] == 5
     
     # Powerup Status  
-    Powerup_Status = pyboy.memory[0xFF99]
-    Die = 4 < pyboy.memory[0XFFA6] < 144
-    lost_live = bool(mario_lives - 1)
+    Powerup_Status_Samll = pyboy.memory[0xFF99] == 0 ; Powerup_Status_big = pyboy.memory[0xFF99] == 2
+    
+    Die = pyboy.memory[0XFFA6] == 0x90 ; lost_live = mario_lives - 1
     
         
     state = torch.tensor(state, dtype=torch.float32, device=device).unsqueeze(0)
@@ -477,34 +462,26 @@ for i_episode in range(num_episodes):
         action = select_action(state, EPS_START)
         observation, reward, terminated, truncated, _ = env.step(action.item())
         
-        if len(mario_pos.shape) == 0:
-            mario_score = mario_score + 0
+        # if len(mario_pos.shape) == 0:
+        #     mario_score = mario_score + 0
         
-        # Calculate life loss and apply penalty if needed
-        prev_mario_lives = mario.lives_left
         Tatol_coins = bool(mario_coins + 1)  # Existing coin logic
         if Tatol_coins:
             mario_score += 100
      
-        if Die == True:
+        if Die is True:
             mario_score += 0
-        
-        # if lost_live == True:
-        #     mario_score += 0
             
         if Goomba is flatten_Goomba:
             mario_score = mario_score + 100
             
         if Nokobon is Nokobon_bomb:
             mario_score = mario_score + 100
-        
-        if Nokobon is Nokobon_bomb:
-            mario_score = mario_score + 100
             
-        if Powerup_Status == 0:
-            mario_score = mario_score + 0
-        elif Powerup_Status == 2:
+        if Powerup_Status_Samll is Powerup_Status_big:
             mario_score = mario_score + 1000
+        else:
+            mario_score = mario_score + 0
         
         done = terminated or truncated
             
