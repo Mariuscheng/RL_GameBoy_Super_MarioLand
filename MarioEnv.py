@@ -1,7 +1,7 @@
 from pyboy import PyBoy
 import gymnasium as gym
 from gymnasium.spaces import Box, Discrete
-from gymnasium.wrappers import FlattenObservation
+from gymnasium.wrappers import FlattenObservation, NumpyToTorch
 
 from enum import Enum
 import numpy as np
@@ -21,16 +21,14 @@ import torch.nn.functional as F
 import sys
 from PIL import Image
 
-from cyberbrain import trace
+# from cyberbrain import trace
 
 device = torch.device(
     "cuda" if torch.cuda.is_available() else
     # "mps" if torch.backends.mps.is_available() else
     "cpu"
 )
-
-
-
+print(device)
 
 class Actions(Enum):
     NOOP = 0
@@ -72,7 +70,7 @@ class Actions(Enum):
 
 
 class MarioEnv(gym.Env):
-    @trace
+    
     def __init__(self, pyboy):
         # super().__init__(PyBoy)
         self.pyboy = pyboy
@@ -88,7 +86,7 @@ class MarioEnv(gym.Env):
         self.observation_space = Box(low=0, high=255, shape=(16, 20), dtype=np.int32) # 假設距離的值範圍是 0-255
         
 
-    @trace
+    
     def step(self, action):
         assert self.action_space.contains(action), "%r (%s) invalid" % (action, type(action))
         
@@ -171,7 +169,7 @@ class MarioEnv(gym.Env):
 
         return state, reward, terminated, truncated, info
 
-    @trace
+    
     def reset(self, seed=42, options=None):
         super().reset(seed=seed)
         #self.pyboy.game_wrapper.reset_game()
@@ -182,15 +180,15 @@ class MarioEnv(gym.Env):
             
         return state, info
 
-    @trace
+    
     def render(self):
         self.pyboy.tick()
 
-    @trace
+    
     def close(self):
         self.pyboy.stop()
 
-    @trace
+    
     def _get_obs(self):
         return self.pyboy.game_area()
         
@@ -198,12 +196,12 @@ class MarioEnv(gym.Env):
 
 
     
-pyboy = PyBoy("rom.gb", window="SDL2") 
+pyboy = PyBoy("rom.gb", window="SDL2", sound_volume=100) 
 env = MarioEnv(pyboy)
 
 # flatten the array
 env = FlattenObservation(env)
-
+env = NumpyToTorch(env)
 
 mario = pyboy.game_wrapper
 
@@ -213,40 +211,29 @@ mario.start_game(world_level=(1,1))
 
 state, info = env.reset()
 
-
-state = torch.from_numpy(state).to(device)
-
-print(state)
-# tensor([339, 339, 339, 339, 339, 339, 339, 339, 339, 339, 339, 339, 339, 339,
-#         339, 339, 339, 339, 339, 339, 320, 320, 320, 320, 320, 320, 320, 320,
-#         320, 320, 320, 320, 320, 320, 320, 320, 320, 320, 320, 320, 300, 300,
-#         300, 300, 300, 300, 300, 300, 300, 300, 300, 300, 321, 322, 321, 322,
-#         323, 300, 300, 300, 300, 300, 300, 300, 300, 300, 300, 300, 300, 300,
-#         300, 324, 325, 326, 325, 326, 327, 300, 300, 300, 300, 300, 300, 300,
-#         300, 300, 300, 300, 300, 300, 300, 300, 300, 300, 300, 300, 300, 300,
-#         300, 300, 300, 300, 300, 300, 300, 300, 300, 300, 300, 300, 300, 300,
-#         300, 300, 300, 300, 300, 300, 300, 300, 300, 300, 300, 300, 300, 300,
-#         300, 300, 300, 300, 300, 300, 300, 300, 300, 300, 300, 300, 300, 300,
-#         300, 300, 300, 300, 300, 300, 300, 300, 310, 350, 300, 300, 300, 300,
-#         300, 300, 300, 300, 300, 300, 300, 300, 300, 300, 300, 300, 300, 310,
-#         300, 300, 350, 300, 300, 300, 300, 300, 300, 300, 300, 300, 300, 300,
-#         300, 300, 300, 129, 310, 300, 300, 300, 300, 350, 300, 300, 300, 300,
-#         300, 300, 300, 300, 300, 300, 300, 300, 300, 310, 300, 300, 300, 300,
-#         300, 300, 350, 300, 300, 300, 300, 300, 300, 300, 300, 300, 310, 350,
-#         310, 300, 300, 300, 300, 306, 307, 300, 300, 350, 300, 300, 300, 300,
-#         300, 300, 300, 368, 369, 300,   0,   1, 300, 306, 307, 305, 300, 300,
-#         300, 300, 350, 300, 300, 300, 300, 300, 310, 370, 371, 300,  16,  17,
-#         300, 305, 300, 305, 300, 300, 300, 300, 300, 350, 300, 300, 300, 300,
-#         352, 352, 352, 352, 352, 352, 352, 352, 352, 352, 352, 352, 352, 352,
-#         352, 352, 352, 352, 352, 352, 353, 353, 353, 353, 353, 353, 353, 353,
-#         353, 353, 353, 353, 353, 353, 353, 353, 353, 353, 353, 353],
-#        device='cuda:0', dtype=torch.int32)
+print(state.to(device))
+# tensor([339, 339, 339, 339, 339, 339, 339, 339, 339, 339, 339, 339, 339, 339, 339, 339, 339, 339, 339, 339, 
+#         320, 320, 320, 320, 320, 320, 320, 320, 320, 320, 320, 320, 320, 320, 320, 320, 320, 320, 320, 320, 
+#         300, 300, 300, 300, 300, 300, 300, 300, 300, 300, 300, 300, 321, 322, 321, 322, 323, 300, 300, 300, 
+#         300, 300, 300, 300, 300, 300, 300, 300, 300, 300, 300, 324, 325, 326, 325, 326, 327, 300, 300, 300, 
+#         300, 300, 300, 300, 300, 300, 300, 300, 300, 300, 300, 300, 300, 300, 300, 300, 300, 300, 300, 300, 
+#         300, 300, 300, 300, 300, 300, 300, 300, 300, 300, 300, 300, 300, 300, 300, 300, 300, 300, 300, 300, 
+#         300, 300, 300, 300, 300, 300, 300, 300, 300, 300, 300, 300, 300, 300, 300, 300, 300, 300, 300, 300, 
+#         300, 300, 300, 300, 300, 300, 300, 300, 310, 350, 300, 300, 300, 300, 300, 300, 300, 300, 300, 300, 
+#         300, 300, 300, 300, 300, 300, 300, 310, 300, 300, 350, 300, 300, 300, 300, 300, 300, 300, 300, 300, 
+#         300, 300, 300, 300, 300, 129, 310, 300, 300, 300, 300, 350, 300, 300, 300, 300, 300, 300, 300, 300, 
+#         300, 300, 300, 300, 300, 310, 300, 300, 300, 300, 300, 300, 350, 300, 300, 300, 300, 300, 300, 300, 
+#         300, 300, 310, 350, 310, 300, 300, 300, 300, 306, 307, 300, 300, 350, 300, 300, 300, 300, 300, 300, 
+#         300, 368, 369, 300,   0,   1, 300, 306, 307, 305, 300, 300, 300, 300, 350, 300, 300, 300, 300, 300, 
+#         310, 370, 371, 300,  16,  17, 300, 305, 300, 305, 300, 300, 300, 300, 300, 350, 300, 300, 300, 300,
+#         352, 352, 352, 352, 352, 352, 352, 352, 352, 352, 352, 352, 352, 352, 352, 352, 352, 352, 352, 352, 
+#         353, 353, 353, 353, 353, 353, 353, 353, 353, 353, 353, 353, 353, 353, 353, 353, 353, 353, 353, 353], device='cuda:0', dtype=torch.int32)
 
 # Get the total 320 number of elements in the tensor
 print("flatten observation space :", torch.tensor(env.observation_space.shape)) #(320, )
 
 
-print("action_space.sample" ,env.action_space.sample()) #1
+print("action_space.sample :", torch.tensor(env.action_space.sample())) #1
 
 
 Transition = namedtuple('Transition',
@@ -268,30 +255,33 @@ class ReplayMemory(object):
     def __len__(self):
         return len(self.memory)
 
-class DQN(nn.Module):
 
+
+class DQN(nn.Module):
     def __init__(self, n_observations, n_actions):
         super(DQN, self).__init__()
-        self.layer1 = nn.Linear(n_observations, 512)
-        self.layer2 = nn.Linear(512, 256)
-        self.layer3 = nn.Linear(256, 128)
-        self.layer4 = nn.Linear(128, n_actions)
+        self.layer1 = nn.Linear(n_observations,  512)
+        self.act1 = nn.Tanh()
+        self.layer2 = nn.Linear(512, 512)
+        self.act2 = nn.Tanh()
+        self.layer3 = nn.Linear(512, 512)
+        self.act3 = nn.Tanh()
+        self.layer4 = nn.Linear(512, n_actions)
 
-    # Called with either one element to determine next action, or a batch
-    # during optimization. Returns tensor([[left0exp,right0exp]...]).
     def forward(self, x):
-        x = F.relu(self.layer1(x))
-        x = F.relu(self.layer2(x))
-        x = F.relu(self.layer3(x))
+        x = F.relu6(self.act1(self.layer1(x)))
+        x = F.relu6(self.act2(self.layer2(x)))
+        x = F.relu6(self.act3(self.layer3(x)))
         return self.layer4(x)
+        
 
-BATCH_SIZE = 32
+BATCH_SIZE = 16
 GAMMA = 0.99
 EPS_START = 1.0
 EPS_END = 0.05
 EPS_DECAY = 1000
 TAU = 0.005
-LR = 0.0001
+LR = 0.0003
 target_update_freq = 1000
 
 # Get number of actions from gym action space
@@ -318,29 +308,10 @@ target_net.load_state_dict(policy_net.state_dict())
 target_net.eval()
 
 optimizer = torch.optim.SGD(policy_net.parameters(), lr=LR, momentum=0.9)
-memory = ReplayMemory(10000)
+memory = ReplayMemory(100000)
 
 
 print(optimizer)
-
-# steps_done = 0
-
-# def select_action(state):
-#     global steps_done
-#     sample = random.random()
-#     eps_threshold = EPS_END + (EPS_START - EPS_END) * \
-#         math.exp(-1. * steps_done / EPS_DECAY)
-#     steps_done += 1
-#     if sample > eps_threshold:
-#         with torch.no_grad():
-#             # t.max(1) will return the largest column value of each row.
-#             # second column on max result is index of where max element was
-#             # found, so we pick action with the larger expected reward.
-#             return policy_net(state).max(1).indices.view(1, 1)
-#     else:
-#         return torch.tensor([[env.action_space.sample()]], device=device, dtype=torch.long)
-
-
 
 
 def select_action(state, EPS_START):
@@ -349,7 +320,6 @@ def select_action(state, EPS_START):
     else: 
         q_values = policy_net(state)
         return torch.argmax(q_values).item()
-
 
     
             
@@ -394,6 +364,8 @@ def optimize_model():
     # This is merged based on the mask, such that we'll have either the expected
     # state value or 0 in case the state was final.
     next_state_values = torch.zeros(BATCH_SIZE, device=device)
+    
+    
     with torch.no_grad():
          # Use policy_net to select best action indices
         best_actions = policy_net(non_final_next_states).max(1)[1]
@@ -408,16 +380,20 @@ def optimize_model():
     # expected_state_action_values = expected_state_action_values.unsqueeze(1)
 
     # Compute Huber loss with matching shapes
-    criterion = nn.SmoothL1Loss()
+    criterion = nn.MSELoss()
     loss = criterion(state_action_values, expected_state_action_values)
-    
+
     # print(f'Loss: {loss.item()}')
 
     # Optimize the model
     optimizer.zero_grad()
     loss.backward()
-    # In-place gradient clipping
-    torch.nn.utils.clip_grad_value_(policy_net.parameters(), 100)
+    # # In-place gradient clipping
+    # torch.nn.utils.clip_grad_value_(policy_net.parameters(), 100)
+    
+    # Gradient clipping
+    torch.nn.utils.clip_grad_norm_(policy_net.parameters(), 1.0)
+    
     optimizer.step()
     
     
@@ -447,23 +423,27 @@ for i_episode in range(num_episodes):
     
     mario_lives = mario.lives_left
     
-    Goomba = pyboy.memory[0XD100] == 0 ; flatten_Goomba = pyboy.memory[0XD100] == 1
-    
-    Nokobon = pyboy.memory[0XD100] == 4 ; Nokobon_bomb = pyboy.memory[0XD100] == 5
-    
-    # Powerup Status  
-    Powerup_Status_Samll = pyboy.memory[0xFF99] == 0 ; Powerup_Status_big = pyboy.memory[0xFF99] == 2
-    
-    Die = pyboy.memory[0XFFA6] == 0x90 ; lost_live = mario_lives - 1
     
         
     state = torch.tensor(state, dtype=torch.float32, device=device).unsqueeze(0)
     for t in count():
         action = select_action(state, EPS_START)
+        
         observation, reward, terminated, truncated, _ = env.step(action.item())
         
+        observation[observation==336] = 300
+        observation[observation==338] = 300
         # if len(mario_pos.shape) == 0:
         #     mario_score = mario_score + 0
+        
+        Goomba = pyboy.memory[0XD100] == 0 ; flatten_Goomba = pyboy.memory[0XD100] == 1
+    
+        Nokobon = pyboy.memory[0XD100] == 4 ; Nokobon_bomb = pyboy.memory[0XD100] == 5
+    
+        # Powerup Status  
+        Powerup_Status_Samll = pyboy.memory[0xFF99] == 0 ; Powerup_Status_big = pyboy.memory[0xFF99] == 2
+    
+        Die = pyboy.memory[0XFFA6] == 0x90 ; lost_live = mario_lives - 1
         
         Tatol_coins = bool(mario_coins + 1)  # Existing coin logic
         if Tatol_coins:
@@ -519,6 +499,7 @@ for i_episode in range(num_episodes):
         steps_done += 1
         
         if mario.lives_left == 0:
+            #print(state)
             mario.reset_game()
             break
         
