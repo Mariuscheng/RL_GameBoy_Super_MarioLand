@@ -342,11 +342,11 @@ print(optimizer)
 
 
 
+
 def select_action(state, EPS_START):
     if random.random() < EPS_START:
-        return torch.tensor([[env.action_space.sample()]], device=device, dtype=torch.long)
+        return torch.tensor([[np.random.randint(n_actions)]], device=device, dtype=torch.long)
     else: 
-        state = torch.FloatTensor(state).unsqueeze(0)
         q_values = policy_net(state)
         return torch.argmax(q_values).item()
 
