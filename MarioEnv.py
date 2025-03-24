@@ -269,9 +269,9 @@ class DQN(nn.Module):
         self.layer4 = nn.Linear(128, n_actions)
 
     def forward(self, x):
-        x = F.relu6(self.act1(self.layer1(x)))
-        x = F.relu6(self.act2(self.layer2(x)))
-        x = F.relu6(self.act3(self.layer3(x)))
+        x = F.relu(self.act1(self.layer1(x)))
+        x = F.relu(self.act2(self.layer2(x)))
+        x = F.relu(self.act3(self.layer3(x)))
         return self.layer4(x)
         
 
