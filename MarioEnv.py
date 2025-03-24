@@ -196,7 +196,7 @@ class MarioEnv(gym.Env):
 
 
     
-pyboy = PyBoy("rom.gb", window="SDL2", sound_volume=100) 
+pyboy = PyBoy("rom.gb", window="SDL2", sound_volume=0) 
 env = MarioEnv(pyboy)
 
 # flatten the array
@@ -262,11 +262,11 @@ class DQN(nn.Module):
         super(DQN, self).__init__()
         self.layer1 = nn.Linear(n_observations,  512)
         self.act1 = nn.Tanh()
-        self.layer2 = nn.Linear(512, 512)
+        self.layer2 = nn.Linear(512, 256)
         self.act2 = nn.Tanh()
-        self.layer3 = nn.Linear(512, 512)
+        self.layer3 = nn.Linear(256, 128)
         self.act3 = nn.Tanh()
-        self.layer4 = nn.Linear(512, n_actions)
+        self.layer4 = nn.Linear(128, n_actions)
 
     def forward(self, x):
         x = F.relu6(self.act1(self.layer1(x)))
@@ -275,7 +275,7 @@ class DQN(nn.Module):
         return self.layer4(x)
         
 
-BATCH_SIZE = 16
+BATCH_SIZE = 256
 GAMMA = 0.99
 EPS_START = 1.0
 EPS_END = 0.05
@@ -305,6 +305,7 @@ for name, param in policy_net.named_parameters():
     print(f"Layer: {name} | Size: {param.size()} | Values : {param[:2]} \n")
 
 target_net.load_state_dict(policy_net.state_dict())
+torch.save(policy_net.state_dict(), 'model_weights.pth')
 target_net.eval()
 
 optimizer = torch.optim.SGD(policy_net.parameters(), lr=LR, momentum=0.9)
@@ -327,72 +328,52 @@ def select_action(state, EPS_START):
 def optimize_model():
     if len(memory) < BATCH_SIZE:
         return
+        
+    # 從經驗回放中採樣批次數據
     transitions = memory.sample(BATCH_SIZE)
-    
-    # Transpose the batch
     batch = Transition(*zip(*transitions))
 
-    # Compute a mask of non-final states and concatenate the batch elements
+    # 創建非終止狀態的掩碼
     non_final_mask = torch.tensor(
         tuple(map(lambda s: s is not None, batch.next_state)),
         device=device,
         dtype=torch.bool
     )
     
-    non_final_next_states = torch.cat(
-        [s for s in batch.next_state if s is not None]
-    )
+    # 收集非終止的下一狀態
+    non_final_next_states = torch.cat([s for s in batch.next_state if s is not None])
     
-    state_batch = torch.cat(batch.state).to(device)
-
-    action_batch = torch.cat(batch.action).to(device).view(BATCH_SIZE, 1)
-
-    # Convert rewards to tensor and add an extra dimension
-    # Convert rewards to tensors, add an extra dimension, and concatenate
-    # reward_batch = torch.cat([r.unsqueeze(0).clone().detach() for r in batch.reward]).to(device)
-
+    # 將當前狀態批次轉換為張量
+    state_batch = torch.cat(batch.state)
+    action_batch = torch.cat(batch.action)
     reward_batch = torch.cat([torch.tensor(r).unsqueeze(0) for r in batch.reward]).to(device)
 
-    # Compute Q(s_t, a) - the model computes Q(s_t), then we select the
-    # columns of actions taken. These are the actions which would've been taken
-    # for each batch state according to policy_net
-    state_action_values = policy_net(state_batch).gather(1, action_batch).squeeze()
+    # 計算當前狀態的 Q 值
+    state_action_values = policy_net(state_batch).gather(1, action_batch)
 
-    # Compute V(s_{t+1}) for all next states.
-    # Expected values of actions for non_final_next_states are computed based
-    # on the "older" target_net; selecting their best reward with max(1).values
-    # This is merged based on the mask, such that we'll have either the expected
-    # state value or 0 in case the state was final.
+    # 初始化下一狀態的值
     next_state_values = torch.zeros(BATCH_SIZE, device=device)
     
-    
+    # 計算下一狀態的目標 Q 值
     with torch.no_grad():
-         # Use policy_net to select best action indices
+        # 使用策略網絡選擇最佳動作
         best_actions = policy_net(non_final_next_states).max(1)[1]
-        # next_state_values[non_final_mask] = target_net(non_final_next_states).max(1)[0]
-        # Evaluate these actions using target_net
+        # 使用目標網絡評估這些動作
         next_state_values[non_final_mask] = target_net(non_final_next_states).gather(1, best_actions.unsqueeze(1)).squeeze()
-    # Compute the expected Q values
+
+    # 計算期望的 Q 值
     expected_state_action_values = (next_state_values * GAMMA) + reward_batch
-        
-    
-    # Ensure expected_state_action_values has an extra dimension for compatibility with state_action_values
-    # expected_state_action_values = expected_state_action_values.unsqueeze(1)
 
-    # Compute Huber loss with matching shapes
+    # 計算 Huber 損失
     criterion = nn.MSELoss()
-    loss = criterion(state_action_values, expected_state_action_values)
+    loss = criterion(state_action_values, expected_state_action_values.unsqueeze(1))
 
-    # print(f'Loss: {loss.item()}')
-
-    # Optimize the model
+    # 優化模型
     optimizer.zero_grad()
     loss.backward()
-    # # In-place gradient clipping
-    # torch.nn.utils.clip_grad_value_(policy_net.parameters(), 100)
     
-    # Gradient clipping
-    torch.nn.utils.clip_grad_norm_(policy_net.parameters(), 1.0)
+    # 梯度裁剪以防止梯度爆炸
+    torch.nn.utils.clip_grad_value_(policy_net.parameters(), 100)
     
     optimizer.step()
     
@@ -413,8 +394,6 @@ for i_episode in range(num_episodes):
     
     episode_reward = 0
     
-    mario.set_lives_left(10)
-    
     # selected_mario_pos = torch.tensor([[244, 245, 264, 265]])
     # mario_pos = state[selected_mario_pos]
     
@@ -423,73 +402,79 @@ for i_episode in range(num_episodes):
     
     mario_lives = mario.lives_left
     
-    
-        
     state = torch.tensor(state, dtype=torch.float32, device=device).unsqueeze(0)
     for t in count():
         action = select_action(state, EPS_START)
         
         observation, reward, terminated, truncated, _ = env.step(action.item())
         
-        observation[observation==336] = 300
-        observation[observation==338] = 300
-        # if len(mario_pos.shape) == 0:
-        #     mario_score = mario_score + 0
+        info = mario
         
-        Goomba = pyboy.memory[0XD100] == 0 ; flatten_Goomba = pyboy.memory[0XD100] == 1
-    
-        Nokobon = pyboy.memory[0XD100] == 4 ; Nokobon_bomb = pyboy.memory[0XD100] == 5
-    
-        # Powerup Status  
-        Powerup_Status_Samll = pyboy.memory[0xFF99] == 0 ; Powerup_Status_big = pyboy.memory[0xFF99] == 2
-    
-        Die = pyboy.memory[0XFFA6] == 0x90 ; lost_live = mario_lives - 1
+        # 獲取遊戲狀態
+        Goomba = pyboy.memory[0XD100] == 0 
+        flatten_Goomba = pyboy.memory[0XD100] == 1
+        Nokobon = pyboy.memory[0XD100] == 4 
+        Nokobon_bomb = pyboy.memory[0XD100] == 5
+        Powerup_Status_Samll = pyboy.memory[0xFF99] == 0x00 
+        Powerup_Status_big = pyboy.memory[0xFF99] == 0x02
+        Die = pyboy.memory[0XFFA6] == 0x90 
         
-        Tatol_coins = bool(mario_coins + 1)  # Existing coin logic
-        if Tatol_coins:
-            mario_score += 100
-     
-        if Die is True:
-            mario_score += 0
-            
-        if Goomba is flatten_Goomba:
-            mario_score = mario_score + 100
-            
-        if Nokobon is Nokobon_bomb:
-            mario_score = mario_score + 100
-            
-        if Powerup_Status_Samll is Powerup_Status_big:
-            mario_score = mario_score + 1000
-        else:
-            mario_score = mario_score + 0
+        # 計算獎勵
+        reward = 0
         
+        # 基礎獎勵：存活獎勵
+        reward += 1
+        
+        # 金幣獎勵
+        if mario.coins > mario_coins:
+            reward += 100
+            mario_coins = mario.coins
+            
+        # 擊敗敵人獎勵
+        if flatten_Goomba:
+            reward += 100
+            
+        if Nokobon_bomb:
+            reward += 100
+            
+        # 變身獎勵
+        if Powerup_Status_big:
+            reward += 1000
+            
+        # 死亡懲罰
+        if Die:
+            reward -= 500
+            
+        # 完成關卡獎勵
+        if mario.level_progress >= 2601:
+            reward += 5000
+            print("level complete")
+            pyboy.stop()
+            break
+            
+        # 更新狀態
         done = terminated or truncated
-            
-        if terminated == True:
+        if terminated:
             next_state = None
         else:
             next_state = torch.tensor(observation, dtype=torch.float32, device=device).unsqueeze(0)
 
-        # Store the transition in memory
+        # 存儲轉換到記憶中
         memory.push(state, action, next_state, reward)
-
-        # Move to the next state
+        
+        # 更新狀態
         state = next_state
-        mario_score += reward
         reward = torch.tensor([reward], device=device)
         
-        
-        truncated = bool(mario.level_progress >= 2601)
-        if truncated == True:
-            mario_score = max(0, mario_score)
-            print("level complete")
-            sys.exit()
+        # 如果生命值為0，結束遊戲
+        if mario.lives_left == 0:
+            mario.reset_game()
+            break
 
-        # Perform one step of the optimization (on the policy network)
+        # 執行優化步驟
         optimize_model()
 
-        # Soft update of the target network's weights
-        # θ′ ← τ θ + (1 −τ )θ′
+        # 軟更新目標網絡權重
         target_net_state_dict = target_net.state_dict()
         policy_net_state_dict = policy_net.state_dict()
         for key in policy_net_state_dict:
@@ -497,21 +482,6 @@ for i_episode in range(num_episodes):
         target_net.load_state_dict(target_net_state_dict)
 
         steps_done += 1
-        
-        if mario.lives_left == 0:
-            #print(state)
-            mario.reset_game()
-            break
-        
-    # Decay epsilon
-    EPS_START = max(EPS_END, EPS_DECAY * EPS_START)
-    
-    rewards_per_episode.append(episode_reward)
 
-# Plotting the rewards per episode
 
-plt.plot(rewards_per_episode)
-plt.xlabel('Episode')
-plt.ylabel('Reward')
-plt.title('DQN on Mario Land')
-plt.show()
+
