@@ -240,49 +240,110 @@ Transition = namedtuple('Transition',
                         ('state', 'action', 'next_state', 'reward'))
 
 
-class ReplayMemory(object):
+# class ReplayMemory(object):
 
-    def __init__(self, capacity):
-        self.memory = deque([], maxlen=capacity)
+#     def __init__(self, capacity):
+#         self.memory = deque([], maxlen=capacity)
 
-    def push(self, *args):
-        """Save a transition"""
-        self.memory.append(Transition(*args))
+#     def push(self, *args):
+#         """Save a transition"""
+#         self.memory.append(Transition(*args))
 
-    def sample(self, batch_size):
-        return random.sample(self.memory, batch_size)
+#     def sample(self, batch_size):
+#         return random.sample(self.memory, batch_size)
+
+#     def __len__(self):
+#         return len(self.memory)
+
+# 優先級經驗回放
+class PrioritizedReplayMemory:
+    def __init__(self, capacity, alpha=0.6):
+        self.capacity = capacity
+        self.memory = []
+        self.priorities = deque(maxlen=capacity)
+        self.alpha = alpha
+
+    def push(self, transition, td_error):
+        max_priority = max(self.priorities) if self.memory else 1.0
+        self.memory.append(transition)
+        self.priorities.append(max_priority ** self.alpha)
+
+        if len(self.memory) > self.capacity:
+            self.memory.pop(0)
+
+    def sample(self, batch_size, beta=0.4):
+        priorities = np.array(self.priorities)
+        probabilities = priorities / priorities.sum()
+        indices = np.random.choice(len(self.memory), batch_size, p=probabilities)
+        samples = [self.memory[idx] for idx in indices]
+        weights = (len(self.memory) * probabilities[indices]) ** (-beta)
+        weights /= weights.max()
+        return samples, torch.tensor(weights, dtype=torch.float32, device=device), indices
+
+    def update_priorities(self, indices, td_errors):
+        for idx, td_error in zip(indices, td_errors):
+            self.priorities[idx] = abs(td_error) ** self.alpha
 
     def __len__(self):
         return len(self.memory)
 
+# class DQN(nn.Module):
+#     def __init__(self, n_observations, n_actions):
+#         super(DQN, self).__init__()
+#         self.layer1 = nn.Linear(n_observations,  512)
+#         self.act1 = nn.Tanh()
+#         self.layer2 = nn.Linear(512, 256)
+#         self.act2 = nn.Tanh()
+#         self.layer3 = nn.Linear(256, 128)
+#         self.act3 = nn.Tanh()
+#         self.layer4 = nn.Linear(128, n_actions)
 
+#     def forward(self, x):
+#         x = F.relu(self.act1(self.layer1(x)))
+#         x = F.relu(self.act2(self.layer2(x)))
+#         x = F.relu(self.act3(self.layer3(x)))
+#         return self.layer4(x)
 
-class DQN(nn.Module):
-    def __init__(self, n_observations, n_actions):
-        super(DQN, self).__init__()
-        self.layer1 = nn.Linear(n_observations,  512)
-        self.act1 = nn.Tanh()
-        self.layer2 = nn.Linear(512, 256)
-        self.act2 = nn.Tanh()
-        self.layer3 = nn.Linear(256, 128)
-        self.act3 = nn.Tanh()
-        self.layer4 = nn.Linear(128, n_actions)
+# 定義分布式 Q 網絡
+class RainbowDQN(nn.Module):
+    def __init__(self, n_observations, n_actions, atom_size, v_min, v_max):
+        super(RainbowDQN, self).__init__()
+        self.n_actions = n_actions
+        self.atom_size = atom_size
+        self.v_min = v_min
+        self.v_max = v_max
+        self.support = torch.linspace(v_min, v_max, atom_size).to(device)
+
+        self.fc1 = nn.Linear(n_observations, 512)
+        self.fc2 = nn.Linear(512, 256)
+        self.fc3 = nn.Linear(256, 128)
+        self.fc4 = nn.Linear(128, n_actions * atom_size)
 
     def forward(self, x):
-        x = F.relu(self.act1(self.layer1(x)))
-        x = F.relu(self.act2(self.layer2(x)))
-        x = F.relu(self.act3(self.layer3(x)))
-        return self.layer4(x)
-        
+        x = F.relu(self.fc1(x))
+        x = F.relu(self.fc2(x))
+        x = F.relu(self.fc3(x))
+        x = self.fc4(x)
+        x = x.view(-1, self.n_actions, self.atom_size)
+        x = F.softmax(x, dim=-1)
+        return x
 
-BATCH_SIZE = 256
+    def get_q_values(self, x):
+        dist = self.forward(x)
+        q_values = torch.sum(dist * self.support, dim=2)
+        return q_values        
+
+# 定義參數
+BATCH_SIZE = 32
 GAMMA = 0.99
+LR = 0.0001
+ATOM_SIZE = 51
+V_MIN = -10
+V_MAX = 10
 EPS_START = 1.0
 EPS_END = 0.05
 EPS_DECAY = 1000
 TAU = 0.005
-LR = 0.0003
-target_update_freq = 1000
 
 # Get number of actions from gym action space
 n_actions = env.action_space.n
@@ -294,8 +355,11 @@ print("n_observations :", n_observations) #320
 channel = state.ndim
 print("n_observations chennel :", channel) #1
 
-policy_net = DQN(n_observations, n_actions).to(device)
-target_net = DQN(n_observations, n_actions).to(device)
+# policy_net = DQN(n_observations, n_actions).to(device)
+# target_net = DQN(n_observations, n_actions).to(device)
+
+policy_net = RainbowDQN(n_observations, n_actions, ATOM_SIZE, V_MIN, V_MAX).to(device)
+target_net = RainbowDQN(n_observations, n_actions, ATOM_SIZE, V_MIN, V_MAX).to(device)
 
 print(f"Model structure: {policy_net}\n\n")
 print("policy_net :", policy_net)
@@ -308,75 +372,132 @@ target_net.load_state_dict(policy_net.state_dict())
 torch.save(policy_net.state_dict(), 'model_weights.pth')
 target_net.eval()
 
-optimizer = torch.optim.SGD(policy_net.parameters(), lr=LR, momentum=0.9)
-memory = ReplayMemory(100000)
+# optimizer = torch.optim.SGD(policy_net.parameters(), lr=LR, momentum=0.9)
+# memory = ReplayMemory(100000)
 
-
+optimizer = optim.Adam(policy_net.parameters(), lr=LR)
+memory = PrioritizedReplayMemory(100000)
 print(optimizer)
 
 
-def select_action(state, EPS_START):
-    if random.random() < EPS_START:
-        return torch.tensor([[np.random.randint(n_actions)]], device=device, dtype=torch.long)
-    else: 
-        q_values = policy_net(state)
-        return torch.argmax(q_values).item()
 
+
+# def select_action(state, EPS_START):
+#     if random.random() < EPS_START:
+#         return torch.tensor([[np.random.randint(n_actions)]], device=device, dtype=torch.long)
+#     else: 
+#         q_values = policy_net(state)
+#         return torch.argmax(q_values).item()
+  
+# 選擇動作
+def select_action(state, epsilon):
+    if random.random() < epsilon:
+        return torch.tensor([[random.randrange(n_actions)]], device=device, dtype=torch.long)
+    else:
+        with torch.no_grad():
+            q_values = policy_net.get_q_values(state)
+            return torch.argmax(q_values).view(1, 1)            
+
+# def optimize_model():
+#     if len(memory) < BATCH_SIZE:
+#         return
+        
+#     # 從經驗回放中採樣批次數據
+#     transitions = memory.sample(BATCH_SIZE)
+#     batch = Transition(*zip(*transitions))
+
+#     # 創建非終止狀態的掩碼
+#     non_final_mask = torch.tensor(
+#         tuple(map(lambda s: s is not None, batch.next_state)),
+#         device=device,
+#         dtype=torch.bool
+#     )
     
-            
+#     # 收集非終止的下一狀態
+#     non_final_next_states = torch.cat([s for s in batch.next_state if s is not None])
+    
+#     # 將當前狀態批次轉換為張量
+#     state_batch = torch.cat(batch.state)
+#     action_batch = torch.cat(batch.action)
+#     reward_batch = torch.cat([torch.tensor(r).unsqueeze(0) for r in batch.reward]).to(device)
 
+#     # 計算當前狀態的 Q 值
+#     state_action_values = policy_net(state_batch).gather(1, action_batch)
+
+#     # 初始化下一狀態的值
+#     next_state_values = torch.zeros(BATCH_SIZE, device=device)
+    
+#     # 計算下一狀態的目標 Q 值
+#     with torch.no_grad():
+#         # 使用策略網絡選擇最佳動作
+#         # best_actions = policy_net(non_final_next_states).max(1)[1]
+#         best_actions = policy_net(non_final_next_states).argmax(dim=1, keepdim=True)
+#         # 使用目標網絡評估這些動作
+#         next_state_values[non_final_mask] = target_net(non_final_next_states).gather(1, best_actions).squeeze()
+#         # next_state_values[non_final_mask] = target_net(non_final_next_states).gather(1, best_actions.unsqueeze(1)).squeeze()
+
+#     # 計算期望的 Q 值
+#     expected_state_action_values = (next_state_values * GAMMA) + reward_batch
+
+#     # 計算 Huber 損失
+#     # criterion = nn.MSELoss()
+#     # loss = criterion(state_action_values, expected_state_action_values.unsqueeze(1))
+#     loss = F.mse_loss(state_action_values, expected_state_action_values.unsqueeze(1))
+
+#     # 優化模型
+#     optimizer.zero_grad()
+#     loss.backward()
+    
+#     # 梯度裁剪以防止梯度爆炸
+#     torch.nn.utils.clip_grad_value_(policy_net.parameters(), 100)
+    
+#     optimizer.step()
+    
+# 優化模型
 def optimize_model():
     if len(memory) < BATCH_SIZE:
         return
-        
-    # 從經驗回放中採樣批次數據
-    transitions = memory.sample(BATCH_SIZE)
+
+    transitions, weights, indices = memory.sample(BATCH_SIZE)
     batch = Transition(*zip(*transitions))
 
-    # 創建非終止狀態的掩碼
-    non_final_mask = torch.tensor(
-        tuple(map(lambda s: s is not None, batch.next_state)),
-        device=device,
-        dtype=torch.bool
-    )
-    
-    # 收集非終止的下一狀態
-    non_final_next_states = torch.cat([s for s in batch.next_state if s is not None])
-    
-    # 將當前狀態批次轉換為張量
     state_batch = torch.cat(batch.state)
     action_batch = torch.cat(batch.action)
     reward_batch = torch.cat([torch.tensor(r).unsqueeze(0) for r in batch.reward]).to(device)
+    non_final_mask = torch.tensor(tuple(map(lambda s: s is not None, batch.next_state)), device=device, dtype=torch.bool)
+    non_final_next_states = torch.cat([s for s in batch.next_state if s is not None])
 
-    # 計算當前狀態的 Q 值
-    state_action_values = policy_net(state_batch).gather(1, action_batch)
-
-    # 初始化下一狀態的值
-    next_state_values = torch.zeros(BATCH_SIZE, device=device)
-    
-    # 計算下一狀態的目標 Q 值
+    # 計算分布式 Q 值
     with torch.no_grad():
-        # 使用策略網絡選擇最佳動作
-        best_actions = policy_net(non_final_next_states).max(1)[1]
-        # 使用目標網絡評估這些動作
-        next_state_values[non_final_mask] = target_net(non_final_next_states).gather(1, best_actions.unsqueeze(1)).squeeze()
+        next_dist = target_net(non_final_next_states)
+        next_q_values = policy_net.get_q_values(non_final_next_states)
+        best_actions = torch.argmax(next_q_values, dim=1)
+        next_dist = next_dist[range(len(non_final_next_states)), best_actions]
 
-    # 計算期望的 Q 值
-    expected_state_action_values = (next_state_values * GAMMA) + reward_batch
+        t_z = reward_batch.unsqueeze(1) + GAMMA * target_net.support.unsqueeze(0)
+        t_z = t_z.clamp(V_MIN, V_MAX)
+        b = (t_z - V_MIN) / (V_MAX - V_MIN) * (ATOM_SIZE - 1)
+        l = b.floor().long()
+        u = b.ceil().long()
 
-    # 計算 Huber 損失
-    criterion = nn.MSELoss()
-    loss = criterion(state_action_values, expected_state_action_values.unsqueeze(1))
+        m = torch.zeros(BATCH_SIZE, ATOM_SIZE, device=device)
+        for i in range(BATCH_SIZE):
+            m[i].scatter_add_(0, l[i], next_dist[i] * (u[i] - b[i]))
+            m[i].scatter_add_(0, u[i], next_dist[i] * (b[i] - l[i]))
 
-    # 優化模型
+    dist = policy_net(state_batch)
+    dist = dist[range(BATCH_SIZE), action_batch.squeeze()]  # 修正形狀
+    log_p = torch.log(dist)
+    loss = -(m * log_p).sum(dim=1) * weights
+    loss = loss.mean()
+
     optimizer.zero_grad()
     loss.backward()
-    
-    # 梯度裁剪以防止梯度爆炸
-    torch.nn.utils.clip_grad_value_(policy_net.parameters(), 100)
-    
     optimizer.step()
-    
+
+    # 更新優先級
+    td_errors = (m - dist).abs().sum(dim=1).detach().cpu().numpy()
+    memory.update_priorities(indices, td_errors)
     
 if torch.cuda.is_available() or torch.backends.mps.is_available():
     num_episodes = 600
@@ -387,26 +508,26 @@ rewards_per_episode = []
 steps_done = 0
 
 # Goomba = pyboy.get_sprite_by_tile_identifier([144])
-
+epsilon = EPS_START
 for i_episode in range(num_episodes):
     # Initialize the environment and get its state
     state, info = env.reset()
-    
-    episode_reward = 0
+    state = torch.tensor(state, dtype=torch.float32, device=device).unsqueeze(0)
     
     # selected_mario_pos = torch.tensor([[244, 245, 264, 265]])
     # mario_pos = state[selected_mario_pos]
     
     mario_score = mario.score
     mario_coins = mario.coins
-    
     mario_lives = mario.lives_left
     
-    state = torch.tensor(state, dtype=torch.float32, device=device).unsqueeze(0)
+    
+    total_reward = 0
+    
     for t in count():
         action = select_action(state, EPS_START)
-        
         observation, reward, terminated, truncated, _ = env.step(action.item())
+        reward = torch.tensor([reward], device=device)
         
         info = mario
         
@@ -426,23 +547,23 @@ for i_episode in range(num_episodes):
         reward += 1
         
         # 金幣獎勵
-        if mario.coins > mario_coins:
+        if mario.coins > mario_coins :
             reward += 100
             mario_coins = mario.coins
             
         # 擊敗敵人獎勵
-        if flatten_Goomba:
+        if flatten_Goomba is True :
             reward += 100
             
-        if Nokobon_bomb:
+        if Nokobon_bomb is True :
             reward += 100
             
         # 變身獎勵
-        if Powerup_Status_big:
+        if Powerup_Status_big is True :
             reward += 1000
             
         # 死亡懲罰
-        if Die:
+        if Die is True :
             reward -= 500
             
         # 完成關卡獎勵
@@ -459,12 +580,13 @@ for i_episode in range(num_episodes):
         else:
             next_state = torch.tensor(observation, dtype=torch.float32, device=device).unsqueeze(0)
 
-        # 存儲轉換到記憶中
-        memory.push(state, action, next_state, reward)
+        # # 存儲轉換到記憶中
+        # memory.push(state, action, next_state, reward)
+        memory.push((state, action, next_state, reward), td_error=1.0)
         
         # 更新狀態
         state = next_state
-        reward = torch.tensor([reward], device=device)
+        total_reward += reward
         
         # 如果生命值為0，結束遊戲
         if mario.lives_left == 0:
@@ -474,14 +596,13 @@ for i_episode in range(num_episodes):
         # 執行優化步驟
         optimize_model()
 
-        # 軟更新目標網絡權重
-        target_net_state_dict = target_net.state_dict()
-        policy_net_state_dict = policy_net.state_dict()
-        for key in policy_net_state_dict:
-            target_net_state_dict[key] = policy_net_state_dict[key]*TAU + target_net_state_dict[key]*(1-TAU)
-        target_net.load_state_dict(target_net_state_dict)
+        # 軟更新目標網路
+        for key in policy_net.state_dict():
+            target_net.state_dict()[key] = TAU * policy_net.state_dict()[key] + (1 - TAU) * target_net.state_dict()[key]
 
         steps_done += 1
+        
+    # 更新 epsilon
+    epsilon = max(EPS_END, epsilon * math.exp(-1.0 / EPS_DECAY))
 
-
-
+    print(f"Episode {i_episode + 1}/{num_episodes}, Total Reward: {total_reward}")
