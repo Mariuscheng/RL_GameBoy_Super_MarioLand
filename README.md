@@ -2,4 +2,4 @@
 
 ## Rainbow-DQN GameBoy Super Mario Land
 ## Model : RainbowDQN
-## AI imporove by MS phi
+## AI imporove by Grok 3
