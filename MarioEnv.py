@@ -42,7 +42,7 @@ class MarioEnv(gym.Env):
         # state = self.get_state()
         
         self.action_space = Discrete(len(Actions))
-        self.observation_space = Box(low=0, high=255, shape=(16,20), dtype=np.uint16)
+        self.observation_space = Box(low=256, high=256, shape=(20,18), dtype=np.uint16)
 
     def send_input(self, event):
         self.pyboy.send_input(event)
@@ -148,6 +148,11 @@ mario.start_game(world_level=(1, 1))
 #mario.game_area_mapping(pyboy.game_wrapper.mapping_minimal, 0)
 mario.set_lives_left(10)
 
+# 獲取 game_area
+game_area = pyboy.game_area()
+print(game_area.shape)  # 假設輸出：(20, 18)
+print(game_area.dtype)  # 假設輸出：uint8
+print(game_area.min(), game_area.max())
 
 # for i in range(1):
 #     print(pyboy.get_sprite(3))
