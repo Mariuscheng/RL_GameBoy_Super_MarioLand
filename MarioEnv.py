@@ -39,10 +39,8 @@ class MarioEnv(gym.Env):
         super().__init__()
         self.pyboy = pyboy
         
-        # state = self.get_state()
-        
         self.action_space = Discrete(len(Actions))
-        self.observation_space = Box(low=256, high=256, shape=(20,18), dtype=np.uint16)
+        self.observation_space = Box(low=256, high=256, shape=(16,20), dtype=np.uint32)
 
     def send_input(self, event):
         self.pyboy.send_input(event)
