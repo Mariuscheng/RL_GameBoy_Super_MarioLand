@@ -1,5 +1,5 @@
 # 最差傑作降臨 (The Worst Project )
 
-## Rainbow-DQN GameBoy Super Mario Land
-## Model : RainbowDQN
+## DQN GameBoy Super Mario Land
+## Model : DQN
 ## AI imporove by Grok 3
