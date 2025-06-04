@@ -258,5 +258,3 @@ for episode in range(num_episodes):
 
         if mario.lives_left == 0:
             mario.reset_game()
-
-pyboy.stop()
