@@ -130,19 +130,6 @@ class MarioEnv(gym.Env):
 
     def close(self):
         self.pyboy.stop()
-        
-# ----------- DQN Model ----------- #
-class DQN(nn.Module):
-    def __init__(self, obs_size, n_actions):
-        super().__init__()
-        self.fc1 = nn.Linear(obs_size, 512)
-        self.fc2 = nn.Linear(512, 512)
-        self.out = nn.Linear(512, n_actions)
-
-    def forward(self, x):
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        return self.out(x)
 
 # ----------- Replay Memory ----------- #
 Transition = namedtuple('Transition', ('observation', 'action', 'next_observation', 'reward', 'terminated'))
