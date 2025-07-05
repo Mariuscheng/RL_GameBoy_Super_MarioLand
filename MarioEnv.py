@@ -5,6 +5,7 @@ import torch.optim as optim
 import numpy as np
 import gymnasium as gym
 from gymnasium.spaces import Box, Discrete
+from gymnasium.wrappers import FlattenObservation
 from pyboy import PyBoy
 from collections import namedtuple, deque
 import random
@@ -37,35 +38,33 @@ class MarioEnv(gym.Env):
         super().__init__()
         self.pyboy = pyboy
         self.action_space = Discrete(len(Actions))
-        self.observation_space = Box(low=np.array([0]*12 + [0]*5 + [0, 0, 0, 1, 1, 0], dtype=np.float32),
-                                     high=np.array([255]*12 + [1]*5 + [3000, 10, 999999, 8, 4, 400], dtype=np.float32))
+        self.observation_space = Box(low=0, high=255, shape=(16,20), dtype=np.uint8)
         self.last_progress = 0
 
-    def get_state(self):
-        def safe_val(sprite, attr):
-            return float(getattr(sprite, attr)) if sprite.on_screen else -1.0
-        return [
-            safe_val(self.pyboy.get_sprite(i), 'x') if i in [3, 4, 5, 6, 20, 21] else 0 for i in range(3, 22)
-            for attr in ['x', 'y']
-        ][:12] + [
-            float(self.pyboy.memory[0xFFA6] == 0x90),
-            float(self.pyboy.memory[0xD100] == 0x01),
-            float(self.pyboy.memory[0xD100] == 0x05),
-            float(self.pyboy.memory[0xD100] == 0x0F),
-            float(self.pyboy.memory[0xC201] > 134),
-            float(self.pyboy.game_wrapper.level_progress),
-            float(self.pyboy.game_wrapper.lives_left),
-            float(self.pyboy.game_wrapper.score),
-            float(self.pyboy.game_wrapper.world[0]),
-            float(self.pyboy.game_wrapper.world[1]),
-            float(self.pyboy.game_wrapper.time_left)
-        ]
+    # def get_state(self):
+    #     def safe_val(sprite, attr):
+    #         return float(getattr(sprite, attr)) if sprite.on_screen else -1.0
+    #     return [
+    #         safe_val(self.pyboy.get_sprite(i), 'x') if i in [3, 4, 5, 6, 20, 21] else 0 for i in range(3, 22)
+    #         for attr in ['x', 'y']
+    #     ][:12] + [
+    #         float(self.pyboy.memory[0xFFA6] == 0x90),
+    #         # float(self.pyboy.memory[0xD100] == 0x01),
+    #         float(self.pyboy.memory[0xD100] == 0x05),
+    #         float(self.pyboy.memory[0xD100] == 0x0F),
+    #         float(self.pyboy.memory[0xC201] > 134),
+    #         float(self.pyboy.game_wrapper.level_progress),
+    #         float(self.pyboy.game_wrapper.lives_left),
+    #         float(self.pyboy.game_wrapper.score),
+    #         float(self.pyboy.game_wrapper.world[0]),
+    #         float(self.pyboy.game_wrapper.world[1]),
+    #         float(self.pyboy.game_wrapper.time_left),
+    #         self.pyboy.get_tile(144).tile_identifier,
+            
+            
+    #     ]
 
-    def reset(self, seed=42, options=None):
-        super().reset(seed=seed)
-        self.last_progress = 0
-        obs = torch.tensor(self.get_state(), dtype=torch.float32, device=device)
-        return obs, self.pyboy.game_wrapper
+    
 
     def step(self, action):
         if action == Actions.NOOP.value:
@@ -112,19 +111,33 @@ class MarioEnv(gym.Env):
         if self.pyboy.game_wrapper.lives_left <= 0:
             reward -= 500
 
-        obs = torch.tensor(self.get_state(), dtype=torch.float32, device=device)
+        # obs = torch.tensor(self.get_state(), dtype=torch.float32, device=device)
+        observation = self.pyboy.game_area()
         terminated = self.pyboy.game_wrapper.level_progress > 2601
         truncated = False
+        
+        info = self.pyboy.game_wrapper
 
-        return obs, reward, terminated, truncated, self.pyboy.game_wrapper
+        return observation, reward, terminated, truncated, info
+    
+    def reset(self, seed=42, options=None):
+        super().reset(seed=seed)
+        self.last_progress = 0
+       # obs = torch.tensor(self.get_state(), dtype=torch.float32, device=device)
+        observation = self.pyboy.game_area()
+        info = self.pyboy.game_wrapper
+        return observation, info
 
+    def close(self):
+        self.pyboy.stop()
+        
 # ----------- DQN Model ----------- #
 class DQN(nn.Module):
     def __init__(self, obs_size, n_actions):
         super().__init__()
-        self.fc1 = nn.Linear(obs_size, 128)
-        self.fc2 = nn.Linear(128, 128)
-        self.out = nn.Linear(128, n_actions)
+        self.fc1 = nn.Linear(obs_size, 512)
+        self.fc2 = nn.Linear(512, 512)
+        self.out = nn.Linear(512, n_actions)
 
     def forward(self, x):
         x = F.relu(self.fc1(x))
@@ -147,53 +160,8 @@ class ReplayMemory:
     def __len__(self):
         return len(self.memory)
 
-# ----------- Select Action ----------- #
-steps_done = 0
 
-def select_action(observation):
-    global steps_done
-    eps_threshold = EPS_END + (EPS_START - EPS_END) * math.exp(-1. * steps_done / EPS_DECAY)
-    steps_done += 1
-
-    if observation.dim() == 1:
-        observation = observation.unsqueeze(0)
-
-    if random.random() < eps_threshold:
-        return torch.tensor([[np.random.randint(n_actions)]], device=device, dtype=torch.long)
-    else:
-        with torch.no_grad():
-            q_values = policy_net(observation)
-            return q_values.argmax(dim=1).view(1, 1)
-
-# ----------- Optimize ----------- #
-def optimize_model():
-    if len(memory) < BATCH_SIZE:
-        return
-    transitions = memory.sample(BATCH_SIZE)
-    batch = Transition(*zip(*transitions))
-
-    non_final_mask = torch.tensor(tuple(map(lambda s: s is not None, batch.next_observation)), device=device, dtype=torch.bool)
-    non_final_next_states = torch.cat([s for s in batch.next_observation if s is not None])
-
-    state_batch = torch.cat(batch.observation)
-    action_batch = torch.cat(batch.action)
-    reward_batch = torch.cat(batch.reward)
-    done_batch = torch.cat(batch.terminated)
-
-    state_action_values = policy_net(state_batch).gather(1, action_batch).squeeze()
-    next_state_values = torch.zeros(BATCH_SIZE, device=device)
-
-    with torch.no_grad():
-        next_state_values[non_final_mask] = target_net(non_final_next_states).max(1)[0]
-
-    expected_values = (next_state_values * GAMMA) + reward_batch * (1 - done_batch.float())
-    loss = nn.SmoothL1Loss()(state_action_values, expected_values)
-
-    optimizer.zero_grad()
-    loss.backward()
-    torch.nn.utils.clip_grad_value_(policy_net.parameters(), 100)
-    optimizer.step()
-
+    
 # ----------- Setup ----------- #
 BATCH_SIZE = 256
 GAMMA = 0.995
@@ -202,40 +170,115 @@ EPS_END = 0.05
 EPS_DECAY = 1000
 TAU = 0.005
 LR = 1e-4
-
-pyboy = PyBoy("rom.gb", window="SDL2", sound_volume=0, cgb=True)
+    
+pyboy = PyBoy('rom.gb', window="SDL2")
 env = MarioEnv(pyboy)
+
 mario = pyboy.game_wrapper
-mario.start_game(world_level=(1, 1))
-mario.set_lives_left(10)
+mario.start_game()
 
 observation, info = env.reset()
-obs_size = observation.shape[0]
+# print(observation.flatten())
+
+flatten_observation = torch.tensor(observation, dtype=torch.float32, device=device).flatten()
+# print(f"Flattened observation : {flatten_observation}")
+n_observations = flatten_observation.numel()
 n_actions = env.action_space.n
 
-policy_net = DQN(obs_size, n_actions).to(device)
-target_net = DQN(obs_size, n_actions).to(device)
+# print(f"Observation size: {n_observations}, Action space: {n_actions}")
+
+# ----------- DQN Model ----------- #
+class DQN(nn.Module):
+    def __init__(self, n_observations, n_actions):
+        super().__init__()
+        self.fc1 = nn.Linear(n_observations, 512)
+        self.fc2 = nn.Linear(512, 512)
+        self.out = nn.Linear(512, n_actions)
+
+    def forward(self, x):
+        x = F.relu(self.fc1(x))
+        x = F.relu(self.fc2(x))
+        return self.out(x)
+    
+policy_net = DQN(n_observations, n_actions).to(device)
+target_net = DQN(n_observations, n_actions).to(device)
 target_net.load_state_dict(policy_net.state_dict())
 target_net.eval()
 
 optimizer = optim.Adam(policy_net.parameters(), lr=LR)
 memory = ReplayMemory(10000)
 
+# print(f"Policy network: {policy_net}")
+
+# ----------- Select Action ----------- #
+steps_done = 0
+
+steps_done = 0
+
+
+def select_action(state):
+    global steps_done
+    sample = random.random()
+    eps_threshold = EPS_END + (EPS_START - EPS_END) * \
+        math.exp(-1. * steps_done / EPS_DECAY)
+    steps_done += 1
+    if sample > eps_threshold:
+        with torch.no_grad():
+            return policy_net(state).max(1).indices.view(1, 1)
+    else:
+        # 修正：隨機產生合法 action index
+        return torch.tensor([[random.randrange(env.action_space.n)]], device=device, dtype=torch.long)
+        
+
+# print(f"Select action function: {select_action(observation)}")
+
+# ----------- Optimize Model ----------- #
+def optimize_model():
+    if len(memory) < BATCH_SIZE:
+        return
+    transitions = memory.sample(BATCH_SIZE)
+    batch = Transition(*zip(*transitions))
+
+    non_final_mask = torch.tensor(tuple(map(lambda s: s is not None,
+                                            batch.next_observation)), device=device, dtype=torch.bool)
+    non_final_next_states = torch.cat([torch.tensor(s, dtype=torch.float32, device=device).flatten().unsqueeze(0)
+                                       for s in batch.next_observation if s is not None])
+    state_batch = torch.cat([torch.tensor(s, dtype=torch.float32, device=device).flatten().unsqueeze(0)
+                             for s in batch.observation])
+    action_batch = torch.cat(batch.action)
+    reward_batch = torch.cat(batch.reward)
+
+    state_action_values = policy_net(state_batch).gather(1, action_batch)
+
+    next_state_values = torch.zeros(BATCH_SIZE, device=device)
+    with torch.no_grad():
+        if len(non_final_next_states) > 0:
+            next_state_values[non_final_mask] = target_net(non_final_next_states).max(1).values
+    expected_state_action_values = (next_state_values * GAMMA) + reward_batch
+
+    criterion = nn.SmoothL1Loss()
+    loss = criterion(state_action_values, expected_state_action_values.unsqueeze(1))
+
+    optimizer.zero_grad()
+    loss.backward()
+    torch.nn.utils.clip_grad_value_(policy_net.parameters(), 100)
+    optimizer.step()
+    
 # ----------- Training Loop ----------- #
 num_episodes = 600 if torch.cuda.is_available() or torch.backends.mps.is_available() else 50
 
 for episode in range(num_episodes):
     observation, info = env.reset()
-    if observation.dim() == 1:
-        observation = observation.unsqueeze(0)
+    # 1. flatten 並轉 tensor
+    observation = torch.tensor(observation, dtype=torch.float32, device=device).flatten().unsqueeze(0)
 
     episode_done = False
-    while not episode_done:
-        pyboy.tick()
-
+    while pyboy.tick():
+        # 2. select_action 輸入 tensor
         action = select_action(observation)
         action_value = action.item()
 
+        # 3. env.step 回傳 observation 也要 flatten 並轉 tensor
         next_obs, reward, terminated, truncated, info = env.step(action_value)
         reward = torch.tensor([reward], device=device)
         terminated = torch.tensor([terminated], device=device)
@@ -244,7 +287,7 @@ for episode in range(num_episodes):
         episode_done = (terminated | truncated).item()
 
         if not episode_done:
-            next_observation = next_obs.unsqueeze(0) if next_obs.dim() == 1 else next_obs
+            next_observation = torch.tensor(next_obs, dtype=torch.float32, device=device).flatten().unsqueeze(0)
         else:
             next_observation = None
 
@@ -253,8 +296,13 @@ for episode in range(num_episodes):
 
         optimize_model()
 
+        # target_net 軟更新
         for key in policy_net.state_dict():
-            target_net.state_dict()[key] = policy_net.state_dict()[key] * TAU + target_net.state_dict()[key] * (1.0 - TAU)
+            target_net.state_dict()[key].data.copy_(
+                policy_net.state_dict()[key] * TAU + target_net.state_dict()[key] * (1.0 - TAU)
+            )
 
         if mario.lives_left == 0:
             mario.reset_game()
+            
+    pyboy.stop()
