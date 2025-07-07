@@ -124,14 +124,17 @@ class MarioEnv(gym.Env):
         # obs = torch.tensor(self.get_state(), dtype=torch.float32, device=device)
         screen = self.pyboy.game_area().flatten()
 
-        level_progress = self.pyboy.game_wrapper.level_progress
-        lifes_left = self.pyboy.game_wrapper.lives_left
+        level_progress = pyboy.game_wrapper.level_progress
+        lifes_left = pyboy.game_wrapper.lives_left
+        score = pyboy.game_wrapper.score
+        world = pyboy.game_wrapper.world[0]  # World number
+        stage = pyboy.game_wrapper.world[1]  # Stage number
+        time = pyboy.game_wrapper.time_left
         
-        mario_x = self.pyboy.memory[0xC202]  # Mario's X position
-        mario_y = self.pyboy.memory[0xC201]  # Mario's Y
-        mario_state = self.pyboy.memory[0xFF99] # Mario's state (small, big, etc.)
-        none_enemies = self.pyboy.memory[0xD100] == 255
-        score = self.pyboy.game_wrapper.score
+        mario_x = pyboy.memory[0xC202]  # Mario's X position
+        mario_y = pyboy.memory[0xC201]  # Mario's Y
+        mario_state = pyboy.memory[0xFF99] # Mario's state (small, big, etc.)
+        none_enemies = pyboy.memory[0xD100] == 255
 
         enemies = [
             none_enemies
@@ -139,7 +142,7 @@ class MarioEnv(gym.Env):
         
         return np.concatenate([
             screen,
-            np.array([level_progress, mario_x, mario_y, mario_state, lifes_left, score], dtype=np.float32), 
+            np.array([level_progress, mario_x, mario_y, mario_state, lifes_left, score, world, stage, time], dtype=np.float32), 
             np.array(enemies, dtype=np.float32)
         ])
     
