@@ -101,22 +101,26 @@ class MarioEnv(gym.Env):
             self.pyboy.button_press("right")
 
         self.pyboy.tick()
+        
+        info = pyboy.game_wrapper
 
-        progress = self.pyboy.game_wrapper.level_progress
-        reward = progress - self.last_progress
-        self.last_progress = progress
+        reward = pyboy.game_wrapper.score
 
-        if self.pyboy.memory[0xD100] in [0x01, 0x05, 0x0F]:
-            reward += 100
-        if self.pyboy.game_wrapper.lives_left <= 0:
-            reward -= 500
+        if pyboy.memory[0xD100] in [0x01, 0x05, 0x0F]:
+            reward + 100
+            
+        if pyboy.memory[0xFFA6] == 0x50:
+            reward + 1000
+        elif pyboy.memory[0xFFA6] == 0x90:
+            reward + 0
+
+        if pyboy.game_wrapper.lives_left <= 1:
+            reward - 500
 
         # obs = torch.tensor(self.get_state(), dtype=torch.float32, device=device)
         observation = self.get_obs()
-        terminated = self.pyboy.game_wrapper.level_progress > 2601
+        terminated = pyboy.game_wrapper.level_progress >= 2600
         truncated = False
-        
-        info = self.pyboy.game_wrapper
 
         return observation, reward, terminated, truncated, info
     
@@ -134,28 +138,36 @@ class MarioEnv(gym.Env):
         mario_x = pyboy.memory[0xC202]  # Mario's X position
         mario_y = pyboy.memory[0xC201]  # Mario's Y
         mario_state = pyboy.memory[0xFF99] # Mario's state (small, big, etc.)
-        none_enemies = pyboy.memory[0xD100] == 255
+        none_enemies = pyboy.memory[0xD100] == 0x255
+        powerup_status_timer = [
+                pyboy.memory[0xFFA6] == 0x50,
+                pyboy.memory[0xFFA6] == 0x40, 
+                pyboy.memory[0xFFA6] == 0x90
+            ]
 
         enemies = [
-            none_enemies
+            pyboy.memory[0xD100] == [0x00],
+            pyboy.memory[0xD100] == [0x02],
+            pyboy.memory[0xD100] == [0x04],
+            pyboy.memory[0xD100] == [0x0E],
+            pyboy.memory[0xD100] == [0x08],
         ]
         
         return np.concatenate([
             screen,
             np.array([level_progress, mario_x, mario_y, mario_state, lifes_left, score, world, stage, time], dtype=np.float32), 
-            np.array(enemies, dtype=np.float32)
+            np.array(powerup_status_timer, dtype=np.float32),
+            np.array(enemies, dtype=np.float32),
+            np.array([none_enemies], dtype=np.float32)
         ])
     
     def reset(self, seed=42, options=None):
         super().reset(seed=seed)
-        self.last_progress = 0
+        
         # obs = torch.tensor(self.get_state(), dtype=torch.float32, device=device)
         observation = self.get_obs()
-        info = self.pyboy.game_wrapper
+        info = pyboy.game_wrapper
         return observation, info
-
-    def close(self):
-        self.pyboy.stop()
         
 
 
@@ -288,6 +300,8 @@ for episode in range(num_episodes):
     observation, info = env.reset()
     # 1. flatten 並轉 tensor
     observation = torch.tensor(observation, dtype=torch.float32, device=device).flatten().unsqueeze(0)
+    
+    pyboy.game_wrapper.set_lives_left(10)
 
     episode_done = False
     while pyboy.tick():
@@ -329,7 +343,7 @@ for episode in range(num_episodes):
         #     print(f"Episode {episode + 1} 完成，獎勵總和: {reward.item():.2f}")
         #     break
         
-        if mario.lives_left == 0:
+        if mario.lives_left <= 0:
             mario.reset_game()
            # print(f"Episode {episode + 1} 生命歸零，重置遊戲")
             
