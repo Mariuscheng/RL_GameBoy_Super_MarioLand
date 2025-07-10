@@ -39,7 +39,7 @@ class MarioEnv(gym.Env):
         self.pyboy = pyboy
         self.action_space = Discrete(len(Actions))
         self.observation_space = Box(low=0, high=255, shape=(16,20), dtype=np.uint8)
-        self.last_progress = 0
+        self.last_score = 0
 
     # def get_state(self):
     #     def safe_val(sprite, attr):
@@ -103,19 +103,22 @@ class MarioEnv(gym.Env):
         self.pyboy.tick()
         
         info = pyboy.game_wrapper
+        
+        current_score = pyboy.game_wrapper.score
 
-        reward = pyboy.game_wrapper.score
+        reward = current_score - self.last_score
+        self.last_score = current_score
 
-        if pyboy.memory[0xD100] in [0x01, 0x05, 0x0F]:
-            reward + 100
+        if pyboy.memory[0xD100] in [1, 5, 4, 70]:
+            reward += 100
             
-        if pyboy.memory[0xFFA6] == 0x50:
-            reward + 1000
-        elif pyboy.memory[0xFFA6] == 0x90:
-            reward + 0
+        if pyboy.memory[0xFFA6] == 5:
+            reward += 1000
+        elif pyboy.memory[0xFFA6] == 0:
+            reward -= 1000
 
         if pyboy.game_wrapper.lives_left <= 1:
-            reward - 500
+            reward += 0
 
         # obs = torch.tensor(self.get_state(), dtype=torch.float32, device=device)
         observation = self.get_obs()
@@ -128,37 +131,32 @@ class MarioEnv(gym.Env):
         # obs = torch.tensor(self.get_state(), dtype=torch.float32, device=device)
         screen = self.pyboy.game_area().flatten()
 
-        level_progress = pyboy.game_wrapper.level_progress
-        lifes_left = pyboy.game_wrapper.lives_left
-        score = pyboy.game_wrapper.score
-        world = pyboy.game_wrapper.world[0]  # World number
-        stage = pyboy.game_wrapper.world[1]  # Stage number
-        time = pyboy.game_wrapper.time_left
-        
-        mario_x = pyboy.memory[0xC202]  # Mario's X position
-        mario_y = pyboy.memory[0xC201]  # Mario's Y
-        mario_state = pyboy.memory[0xFF99] # Mario's state (small, big, etc.)
-        none_enemies = pyboy.memory[0xD100] == 0x255
-        powerup_status_timer = [
-                pyboy.memory[0xFFA6] == 0x50,
-                pyboy.memory[0xFFA6] == 0x40, 
-                pyboy.memory[0xFFA6] == 0x90
-            ]
-
-        enemies = [
-            pyboy.memory[0xD100] == [0x00],
-            pyboy.memory[0xD100] == [0x02],
-            pyboy.memory[0xD100] == [0x04],
-            pyboy.memory[0xD100] == [0x0E],
-            pyboy.memory[0xD100] == [0x08],
+        game_state = [
+            pyboy.game_wrapper.level_progress,
+            pyboy.game_wrapper.lives_left,
+            pyboy.game_wrapper.score,
+            pyboy.game_wrapper.world[0],  # World number
+            pyboy.game_wrapper.world[1],  # Stage number
+            pyboy.game_wrapper.time_left
         ]
-        
+
+        mario_state =[
+            pyboy.memory[0xC202],  # Mario's X position
+            pyboy.memory[0xC201],  # Mario's Y
+            pyboy.memory[0xFF99], # Mario's state (small, big, etc.)
+            pyboy.memory[0xFFA6]
+        ]
+
+        enemy_id, enemy_hp, enemy_x, enemy_y = pyboy.memory[0xD100:0xD104]
+
+        # 將敵人資訊組成向量
+        enemy_info = [enemy_id, enemy_hp, enemy_x, enemy_y]
+
         return np.concatenate([
             screen,
-            np.array([level_progress, mario_x, mario_y, mario_state, lifes_left, score, world, stage, time], dtype=np.float32), 
-            np.array(powerup_status_timer, dtype=np.float32),
-            np.array(enemies, dtype=np.float32),
-            np.array([none_enemies], dtype=np.float32)
+            np.array(game_state, dtype=np.float32),
+            np.array(mario_state, dtype=np.float32),
+            np.array(enemy_info, dtype=np.float32),
         ])
     
     def reset(self, seed=42, options=None):
@@ -218,8 +216,8 @@ n_actions = env.action_space.n
 class DQN(nn.Module):
     def __init__(self, n_observations, n_actions):
         super().__init__()
-        self.fc1 = nn.Linear(n_observations, 512)
-        self.fc2 = nn.Linear(512, 512)
+        self.fc1 = nn.Linear(n_observations, 1024)
+        self.fc2 = nn.Linear(1024, 512)
         self.out = nn.Linear(512, n_actions)
 
     def forward(self, x):
