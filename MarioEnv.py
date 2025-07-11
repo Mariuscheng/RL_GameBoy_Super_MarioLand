@@ -109,7 +109,7 @@ class MarioEnv(gym.Env):
         reward = current_score - self.last_score
         self.last_score = current_score
 
-        if pyboy.memory[0xD100] in [1, 5, 4, 70]:
+        if pyboy.memory[0xD100] in [1, 5, 4, 14, 70]:
             reward += 100
             
         if pyboy.memory[0xFFA6] == 5:
@@ -144,19 +144,23 @@ class MarioEnv(gym.Env):
             pyboy.memory[0xC202],  # Mario's X position
             pyboy.memory[0xC201],  # Mario's Y
             pyboy.memory[0xFF99], # Mario's state (small, big, etc.)
-            pyboy.memory[0xFFA6]
+            pyboy.memory[0xFFA6],
+            pyboy.memory[0xFFB5],  # Mario's power-up status (e.g., fire flower, star)
         ]
 
-        enemy_id, enemy_hp, enemy_x, enemy_y = pyboy.memory[0xD100:0xD104]
-
         # 將敵人資訊組成向量
-        enemy_info = [enemy_id, enemy_hp, enemy_x, enemy_y]
+        enemy_info = [pyboy.memory[0xD100], pyboy.memory[0xD101], pyboy.memory[0xD102], pyboy.memory[0xD103]]
+        
+        distances = enemy_info[3] - mario_state[0]  # 假設敵人資訊包含敵人的位置
+        no_enemy = [enemy_info[0] == 255, enemy_info[1] == 0, enemy_info[2] == 136, enemy_info[3] == 67]
 
         return np.concatenate([
             screen,
             np.array(game_state, dtype=np.float32),
             np.array(mario_state, dtype=np.float32),
             np.array(enemy_info, dtype=np.float32),
+            np.array([distances], dtype=np.float32),
+            np.array(no_enemy, dtype=np.float32)  # 修正：包成一個 list
         ])
     
     def reset(self, seed=42, options=None):
