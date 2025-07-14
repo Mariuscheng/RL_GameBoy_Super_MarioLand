@@ -103,22 +103,8 @@ class MarioEnv(gym.Env):
         self.pyboy.tick()
         
         info = pyboy.game_wrapper
-        
-        current_score = pyboy.game_wrapper.score
 
-        reward = current_score - self.last_score
-        self.last_score = current_score
-
-        if pyboy.memory[0xD100] in [1, 5, 4, 14, 70]:
-            reward += 100
-            
-        if pyboy.memory[0xFFA6] == 5:
-            reward += 1000
-        elif pyboy.memory[0xFFA6] == 0:
-            reward -= 1000
-
-        if pyboy.game_wrapper.lives_left <= 1:
-            reward += 0
+        reward = self.calc_reward()
 
         # obs = torch.tensor(self.get_state(), dtype=torch.float32, device=device)
         observation = self.get_obs()
@@ -147,21 +133,53 @@ class MarioEnv(gym.Env):
             pyboy.memory[0xFFA6],
             pyboy.memory[0xFFB5],  # Mario's power-up status (e.g., fire flower, star)
         ]
+        
+        enemy = pyboy.memory[0xD100] in [0, 2, 3, 4, 14, 15, 42]
+        boss = pyboy.memory[0xD100] in [8, 91, 97]
+        no_enemy = [pyboy.memory[0xD100] == 255, pyboy.memory[0xD101] == 0, pyboy.memory[0xD102] == 136, pyboy.memory[0xD103] == 67]
 
         # 將敵人資訊組成向量
-        enemy_info = [pyboy.memory[0xD100], pyboy.memory[0xD101], pyboy.memory[0xD102], pyboy.memory[0xD103]]
+        enemy_info = [
+            pyboy.memory[0xD100],
+            pyboy.memory[0xD101],
+            pyboy.memory[0xD102],
+            pyboy.memory[0xD103],
+            pyboy.memory[0xD106],
+            pyboy.memory[0xD108],
+            float(enemy),  # 轉成 float，方便合併
+            float(boss),
+            *[float(x) for x in no_enemy]  # 展開 no_enemy 並轉成 float
+        ]
         
-        distances = enemy_info[3] - mario_state[0]  # 假設敵人資訊包含敵人的位置
-        no_enemy = [enemy_info[0] == 255, enemy_info[1] == 0, enemy_info[2] == 136, enemy_info[3] == 67]
+        distances = [enemy_info[3] - mario_state[0],
+                     enemy_info[2] - mario_state[1]
+                     ]  # 假設敵人資訊包含敵人的位置
+        
+        
 
         return np.concatenate([
-            screen,
+           # screen,
             np.array(game_state, dtype=np.float32),
             np.array(mario_state, dtype=np.float32),
             np.array(enemy_info, dtype=np.float32),
-            np.array([distances], dtype=np.float32),
+            np.array(distances, dtype=np.float32),
             np.array(no_enemy, dtype=np.float32)  # 修正：包成一個 list
         ])
+    
+    def calc_reward(self):
+        reward = pyboy.game_wrapper.score - self.last_score
+        self.last_score = pyboy.game_wrapper.score
+        reward += 1  # 存活獎勵
+        if pyboy.memory[0xFFA6] == 0x90:
+            reward -= 1000
+        if pyboy.memory[0xFFA6] == 0x50:
+            reward += 1000
+        if pyboy.memory[0xD100] in [1, 5, 4, 14, 15, 70]:
+            reward += 100
+        if pyboy.game_wrapper.level_progress >= 2600:
+            reward += 2000
+        reward = np.clip(reward, -1000, 2000)
+        return reward
     
     def reset(self, seed=42, options=None):
         super().reset(seed=seed)
@@ -220,9 +238,9 @@ n_actions = env.action_space.n
 class DQN(nn.Module):
     def __init__(self, n_observations, n_actions):
         super().__init__()
-        self.fc1 = nn.Linear(n_observations, 1024)
-        self.fc2 = nn.Linear(1024, 512)
-        self.out = nn.Linear(512, n_actions)
+        self.fc1 = nn.Linear(n_observations, 256)
+        self.fc2 = nn.Linear(256, 256)
+        self.out = nn.Linear(256, n_actions)
 
     def forward(self, x):
         x = F.relu(self.fc1(x))
@@ -300,10 +318,11 @@ num_episodes = 600 if torch.cuda.is_available() or torch.backends.mps.is_availab
 for episode in range(num_episodes):
     # print(f"Episode {episode + 1}/{num_episodes}")
     observation, info = env.reset()
+    pyboy.game_wrapper.set_lives_left(10)
     # 1. flatten 並轉 tensor
     observation = torch.tensor(observation, dtype=torch.float32, device=device).flatten().unsqueeze(0)
     
-    pyboy.game_wrapper.set_lives_left(10)
+    
 
     episode_done = False
     while pyboy.tick():
