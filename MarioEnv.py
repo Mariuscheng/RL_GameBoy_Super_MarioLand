@@ -108,14 +108,13 @@ class MarioEnv(gym.Env):
 
         # obs = torch.tensor(self.get_state(), dtype=torch.float32, device=device)
         observation = self.get_obs()
-        terminated = pyboy.game_wrapper.level_progress >= 2600
+        terminated = bool(pyboy.game_wrapper.level_progress == 2601)
         truncated = False
 
         return observation, reward, terminated, truncated, info
     
     def get_obs(self):
         # obs = torch.tensor(self.get_state(), dtype=torch.float32, device=device)
-        screen = self.pyboy.game_area().flatten()
 
         game_state = [
             pyboy.game_wrapper.level_progress,
@@ -126,11 +125,13 @@ class MarioEnv(gym.Env):
             pyboy.game_wrapper.time_left
         ]
 
-        mario_state =[
+        mario_state = [
             pyboy.memory[0xC202],  # Mario's X position
             pyboy.memory[0xC201],  # Mario's Y
-            pyboy.memory[0xFF99], # Mario's state (small, big, etc.)
+            pyboy.memory[0xC207],
+            pyboy.memory[0xC20A],
             pyboy.memory[0xFFA6],
+            pyboy.memory[0xFF99],  # Mario's state (small, big, etc.)
             pyboy.memory[0xFFB5],  # Mario's power-up status (e.g., fire flower, star)
         ]
         
@@ -178,7 +179,9 @@ class MarioEnv(gym.Env):
             reward += 100
         if pyboy.game_wrapper.level_progress >= 2600:
             reward += 2000
-        reward = np.clip(reward, -1000, 2000)
+        if pyboy.memory[0xC0A4] == 0x39:
+            reward -= 2000
+        reward = np.clip(reward, -2000, 2000)
         return reward
     
     def reset(self, seed=42, options=None):
@@ -307,6 +310,27 @@ def optimize_model():
     loss.backward()
     torch.nn.utils.clip_grad_value_(policy_net.parameters(), 100)
     optimizer.step()
+
+
+# ----------- reward_history ----------- #
+import matplotlib.pyplot as plt
+
+fig, axs = plt.subplots(1, 1, figsize=(6, 4))
+plt.ion()
+
+def plot_rewards(reward_history, num_episodes):
+    axs.clear()
+    rewards = [r.item() if hasattr(r, 'item') else float(r) for r in reward_history]
+    axs.plot(range(1, num_episodes + 1), rewards, marker='o', linestyle='-')
+    axs.set_xlabel('Episode')
+    axs.set_ylabel('Reward')
+    axs.set_title('Episode Reward Trend')
+    axs.grid(True)
+    plt.tight_layout()
+    plt.draw()
+    plt.pause(0.001)
+
+
     
 # ----------- Training Loop ----------- #
 num_episodes = 600 if torch.cuda.is_available() or torch.backends.mps.is_available() else 50
@@ -314,11 +338,11 @@ num_episodes = 600 if torch.cuda.is_available() or torch.backends.mps.is_availab
 # print(f"開始訓練，共 {num_episodes} 個 episodes")
 # print(f"使用設備: {device}")
 # print(f"觀察空間大小: {n_observations}, 動作空間大小: {n_actions}")
-
+reward_history = []
 for episode in range(num_episodes):
     # print(f"Episode {episode + 1}/{num_episodes}")
     observation, info = env.reset()
-    pyboy.game_wrapper.set_lives_left(10)
+    
     # 1. flatten 並轉 tensor
     observation = torch.tensor(observation, dtype=torch.float32, device=device).flatten().unsqueeze(0)
     
@@ -364,7 +388,11 @@ for episode in range(num_episodes):
         #     print(f"Episode {episode + 1} 完成，獎勵總和: {reward.item():.2f}")
         #     break
         
-        if mario.lives_left <= 0:
+        # if mario.lives_left <= 0:
+        if pyboy.memory[0xC0A4] == 0x39:
+            reward_history.append(reward)  # reward 是 torch.tensor([reward], device=device)
+            plot_rewards(reward_history, len(reward_history))
+            mario.set_lives_left(10)
             mario.reset_game()
            # print(f"Episode {episode + 1} 生命歸零，重置遊戲")
             
