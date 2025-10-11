@@ -211,29 +211,39 @@ print("Number of actions:", num_actions) #14
 
 # 改進的 DQN 模型（整合 game_state）
 class DQN(nn.Module):
-    def __init__(self, in_channels=1, num_actions=14, fc_units=128, state_dim=9):
+    def __init__(self, input_shape=(16,20), in_channels=1, num_actions=num_actions, fc_units=128, state_dim=len(game_state)):
         super(DQN, self).__init__()
         self.conv1 = nn.Conv2d(in_channels, 8, kernel_size=3, stride=1, padding=1)
         self.pool1 = nn.MaxPool2d(2, 2)
         self.conv2 = nn.Conv2d(8, 16, kernel_size=3, stride=1, padding=1)
         self.m = nn.Flatten()
-        self.fc1 = nn.Linear(16 * 8 * 10 + state_dim, fc_units)  # 拼接 game_state
+
+        # 使用 dummy tensor 計算 conv 層輸出 flatten 大小（自動處理 game_shape）
+        with torch.no_grad():
+            h, w = input_shape
+            dummy = torch.zeros(1, in_channels, h, w)
+            out = F.relu(self.conv1(dummy))
+            out = self.pool1(out)
+            out = F.relu(self.conv2(out))
+            conv_output_size = out.numel() // out.shape[0]
+
+        self.fc1 = nn.Linear(conv_output_size + state_dim, fc_units)  # 拼接 game_state
         self.dropout = nn.Dropout(0.2)
         self.fc2 = nn.Linear(fc_units, num_actions)
 
     def forward(self, x, state_vector):
-        x = F.relu(self.conv1(x))  # (batch_size, 8, 16, 20)
-        x = self.pool1(x)  # (batch_size, 8, 8, 10)
-        x = F.relu(self.conv2(x))  # (batch_size, 16, 8, 10)
-        x = self.m(x)  # (batch_size, 16 * 8 * 10 = 1280)
-        x = torch.cat((x, state_vector), dim=1)  # 拼接: (batch_size, 1280 + 9)
-        x = F.relu(self.fc1(x))  # (batch_size, 128)
+        x = F.relu(self.conv1(x))
+        x = self.pool1(x)
+        x = F.relu(self.conv2(x))
+        x = self.m(x)
+        x = torch.cat((x, state_vector), dim=1)
+        x = F.relu(self.fc1(x))
         x = self.dropout(x)
-        x = self.fc2(x)  # (batch_size, 14)
+        x = self.fc2(x)
         return x
     
 # 初始化模型和優化器
-model = DQN(in_channels=1, num_actions=14, fc_units=128, state_dim=9).to(device)
+model = DQN(input_shape=game_shape, in_channels=1, num_actions=num_actions, fc_units=128, state_dim=len(game_state)).to(device)
 optimizer = optim.Adam(model.parameters(), lr=0.001)
 
 # 訓練循環
@@ -255,13 +265,28 @@ while episode < max_episodes:
     total_reward = 0
     done = False
     prev_lives = game_state["lives"]
+     # 新增：準確率計數
+    step_count = 0
+    agree_count = 0
+    
     while not done:
         if random.random() < epsilon:
             action = env.action_space.sample()
         else:
             with torch.no_grad():
                 q_values = model(state, game_state_vector)
-                action = q_values.argmax().item()
+                pred_action = q_values.argmax().item()
+                
+            # epsilon-greedy：若隨機採樣，action 為隨機；否則使用模型預測
+            if random.random() < epsilon:
+                action = env.action_space.sample()
+            else:
+                action = pred_action
+                
+            # 更新準確率計數
+            step_count += 1
+            if action == pred_action:
+                agree_count += 1
 
         next_state, reward, terminated, truncated, info = env.step(action)
         next_game_state = env.game_state()
@@ -299,11 +324,15 @@ while episode < max_episodes:
                 mario.reset_game()
 
             episode += 1
-            print(f"Episode {episode}, Total Reward: {total_reward}")
+            # 輸出加上準確率
+            accuracy = (agree_count / step_count) if step_count > 0 else 0.0
+            print(f"Episode {episode}, Total Reward: {total_reward}, Accuracy: {accuracy*100:.2f}% ({agree_count}/{step_count})")
             break
 
         state = next_state
         game_state_vector = next_game_state_vector
         prev_lives = next_game_state["lives"]
         epsilon = max(epsilon_min, epsilon * epsilon_decay)
+        
+pyboy.stop()    
         
