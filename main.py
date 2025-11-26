@@ -253,7 +253,7 @@ class MarioEnv(gym.Env):
 pyboy = PyBoy('rom.gb', window="SDL2", sound_volume=0)
 
 env = MarioEnv(pyboy)
-env = FrameStackObservation(env, stack_size=2)
+env = FrameStackObservation(env, stack_size=4)
 # env = ReshapeObservation(env, shape=(1, 4, 16, 20))
 
 mario = pyboy.game_wrapper
@@ -459,3 +459,4 @@ for i_episode in range(num_episodes):
         target_net.load_state_dict(target_net_state_dict)
         
     pyboy.stop()
+
