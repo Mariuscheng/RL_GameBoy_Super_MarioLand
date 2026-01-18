@@ -1,6 +1,6 @@
 # GameBoy Super Mario land (A.I improve)
 
-## Observation Space (9,)
+## Observation Space (12,)
 
 
 | Num | Observation                               | Min | Max    |
@@ -59,9 +59,18 @@
 | :--------- | --------------------- |
 | 最大步數 | = 2601              |
 
+## Sample 
+Initial observation: [  2.   0. 400. 251.   0.   1.   1.  50. 134.   0.   0.   0.]
+Observation space: 12
+Action space: 13
+
+## Model
+DQN : 128 hidden layer
+
 ## Reference
 
 - [Gym Retro](https://gymnasium.farama.org/)
 - [PyBoy API](https://docs.pyboy.dk/index.html)
 - [PyBoy Mario Land API](https://docs.pyboy.dk/plugins/game_wrapper_super_mario_land.html)
 - [Super Mario Land Ram Map Wiki](https://datacrystal.tcrf.net/wiki/Super_Mario_Land/RAM_map)
+
