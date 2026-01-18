@@ -1,4 +1,4 @@
-## GameBoy Super Mario land
+## GameBoy Super Mario land (A.I improve)
 
 # Observation Space (9,)
 
