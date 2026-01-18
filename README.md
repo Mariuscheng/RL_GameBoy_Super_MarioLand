@@ -1,6 +1,6 @@
-## GameBoy Super Mario land (A.I improve)
+# GameBoy Super Mario land (A.I improve)
 
-# Observation Space (9,)
+## Observation Space (9,)
 
 
 | Num | Observation                               | Min | Max    |
@@ -18,7 +18,7 @@
 | 10  | Power State (pyboy.memory[0xFF99])        | 0   | 4      |
 | 11  | Mario jump routine (pyboy.memory[0xC207]) | 0   | 2      |
 
-# Action Space (GameBoy)
+## Action Space (GameBoy)
 
 
 | Button               | Action                           |
@@ -32,7 +32,7 @@
 | Run                  | B(LongPress) + Right/Left        |
 | Right-Jump/Left-Jump | B(LongPress) + Right/Left + Jump |
 
-# Reward
+## Reward
 
 
 | Item                  | Reward System(One Time) |
@@ -43,7 +43,7 @@
 | Power_state + 1       | + 100                   |
 | Power_state = 0       | - 100                   |
 
-# terminated
+## terminated
 
 
 | Item              | Terminated Condition |
@@ -52,14 +52,14 @@
 | if lives_left = 0 | mario.reset_game()   |
 | if time_left = 0  | mario.reset_game()   |
 
-# truncated
+## truncated
 
 
 | Item     | Truncated Condition |
 | :--------- | --------------------- |
 | 最大步數 | = 2601              |
 
-# Reference
+## Reference
 
 - [Gym Retro](https://gymnasium.farama.org/)
 - [PyBoy API](https://docs.pyboy.dk/index.html)
