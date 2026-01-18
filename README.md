@@ -1,6 +1,6 @@
 # GameBoy Super Mario land (A.I improve)
 
-## Observation Space (12,)
+## Observation Space (9,)
 
 
 | Num | Observation                               | Min | Max    |
@@ -43,14 +43,20 @@
 | Power_state + 1       | + 100                   |
 | Power_state = 0       | - 100                   |
 
-## terminated
+## terminated(運行mario.reset_game())
 
 
 | Item              | Terminated Condition |
 | :------------------ | ---------------------- |
-| level_progress    | = 2601 (Goal)        |
 | if lives_left = 0 | mario.reset_game()   |
 | if time_left = 0  | mario.reset_game()   |
+
+## terminated(運行pyboy.stop() )
+
+
+| Item           | Terminated Condition |
+| :--------------- | ---------------------- |
+| level_progress | = 2601 (Goal)        |
 
 ## truncated
 
@@ -65,14 +71,9 @@
 2. Observation space: 12
 3. Action space: 13
 
-## Model
-DQN : 128 hidden layer
-
 ## Reference
 
 - [Gym Retro](https://gymnasium.farama.org/)
 - [PyBoy API](https://docs.pyboy.dk/index.html)
 - [PyBoy Mario Land API](https://docs.pyboy.dk/plugins/game_wrapper_super_mario_land.html)
 - [Super Mario Land Ram Map Wiki](https://datacrystal.tcrf.net/wiki/Super_Mario_Land/RAM_map)
-
-
