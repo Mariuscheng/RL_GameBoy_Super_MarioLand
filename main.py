@@ -386,9 +386,13 @@ def optimize_model():
     torch.nn.utils.clip_grad_value_(policy_net.parameters(), 100)
     optimizer.step()
     
-
+if torch.cuda.is_available() or torch.backends.mps.is_available():
+    num_episodes = 600
+else:
+    num_episodes = 50
+    
 # 添加訓練迴圈
-for episode in range(10):  # 範例 10 集
+for episode in range(num_episodes):
     state, info = env.reset()
     state = torch.tensor(state, dtype=torch.float32, device=device)
     while pyboy.tick():  # 每集 100 步
@@ -420,3 +424,4 @@ for episode in range(10):  # 範例 10 集
         for key in policy_net_state_dict:
             target_net_state_dict[key] = policy_net_state_dict[key] * TAU + target_net_state_dict[key] * (1 - TAU)
         target_net.load_state_dict(target_net_state_dict)
+
