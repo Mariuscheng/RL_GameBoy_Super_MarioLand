@@ -247,7 +247,7 @@ class MarioEnv(gym.Env):
                     self.pyboy.memory[0xFF99], self.pyboy.memory[0xC207], self.pyboy.memory[0xC203], self.pyboy.memory[0xFFA6]]  # 7 個
         rom_table = [self.pyboy.memory[0xD100], self.pyboy.memory[0xD101], self.pyboy.memory[0xD102], 
                     self.pyboy.memory[0xD103], self.pyboy.memory[0xD106], self.pyboy.memory[0xD108], 0]  # 補充至 7 個（添加 0）
-        return np.array([game_state, mario_state, rom_table], dtype=np.float16)  # 現在形狀一致 (3, 7)
+        return np.array([game_state, mario_state, rom_table], dtype=np.float32)  # 現在形狀一致 (3, 7)
 
 
 Transition = namedtuple('Transition',
@@ -424,4 +424,5 @@ for episode in range(num_episodes):
         for key in policy_net_state_dict:
             target_net_state_dict[key] = policy_net_state_dict[key] * TAU + target_net_state_dict[key] * (1 - TAU)
         target_net.load_state_dict(target_net_state_dict)
+
 
