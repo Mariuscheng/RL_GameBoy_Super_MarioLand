@@ -43,46 +43,31 @@ class MarioEnv(gym.Env):
         self.pyboy = pyboy
         self.mario = self.pyboy.game_wrapper
         
-        # 根據 README.md 設定合理的最大值 (索引 0-11, 共 12 個)
-        high = np.array([
-            99,         # 0: lives_left
-            999999,     # 1: score
-            400,        # 2: time_left
-            2601,       # 3: level_progress
-            99,         # 4: coins
-            4,          # 5: world
-            3,          # 6: stage
-            81,         # 7: mario x position
-            134,        # 8: mario y position
-            57,         # 9: game over
-            4,          # 10: power state
-            2,          # 11: mario jump routine
+        # 假設新觀察形狀為 (3, 7)，重新定義 low 和 high
+        # 基於原來的範圍，分組為 3 行，每行 7 個元素
+        # 注意：調整值以匹配您的實際範圍（例如，rom_table 的 high 可能不同）
+        # 統一為 (3, 7)，補充 rom_table 至 7 個元素（例如，添加 0 或移除一個）
+        low = np.array([
+            [0, 0, 0, 250, 0, 1, 1],      # game_state: lives, score, time, progress, coins, world, stage
+            [0, 0, 0, 0, 0, 0, 0],        # mario_state: x_pos, y_pos, game_over, power_state, jump_routine, pose, timer=
+            [0, 0, 0, 0, 0, 0, 0]         # rom_table: 記憶體值
         ], dtype=np.float32)
         
-        low = np.array([
-            0,          # 0: lives_left
-            0,          # 1: score
-            0,          # 2: time_left
-            250,        # 3: level_progress
-            0,          # 4: coins
-            1,          # 5: world
-            1,          # 6: stage
-            0,          # 7: mario x position
-            0,          # 8: mario y position
-            0,          # 9: game over
-            0,          # 10: power state
-            0,          # 11: mario jump routine
+        high = np.array([
+            [99, 999999, 400, 2601, 99, 4, 3],  # game_state (7)
+            [81, 134, 57, 4, 2, 5, 255],        # mario_state (7)
+            [255, 255, 255, 255, 255, 255, 255]  # rom_table (補充至 7)
         ], dtype=np.float32)
         
         self.action_space = Discrete(len(Actions))
-        self.observation_space = spaces.Box(low, high, shape=(len(low),), dtype=np.float32)
+        self.observation_space = spaces.Box(low, high,  shape=low.shape, dtype=np.float32)
         
         self.mario.start_game()
         self.mario.set_lives_left(10)
         
-        
-        self.prev_progress = 0  # 新增：追蹤上一步進度
-        self.prev_score = 0  # 新增：追蹤上一步分數
+        # 初始化 reward 追蹤變數
+        self.prev_progress = 0
+        self.prev_power_state = 0
 
     def step(self, action):
         
@@ -165,15 +150,24 @@ class MarioEnv(gym.Env):
         
         info = self.pyboy.game_wrapper
         # 根據 README.md 的 terminated 條件
-        terminated = (self.live() == 0 or 
-                     self.pyboy.memory[0xC0A4] != 0 or 
-                     self.progress() == 2601)  # 死亡、game over 或達到終點
-        truncated = self.time() == 0  # 時間耗盡
+        # terminated(Rest)：生命值=0 或 時間=0 時重置遊戲
+        terminated = (self.live() == 0 or self.time() == 0)
+        # terminated(Stop)：進度=2601 時停止遊戲
+        truncated = (self.progress() == 2601)
+        
+        
+        truncated = False  # 不使用 truncated 信號
 
         state = self.get_obs()
-        # extra terminal bonus
+        
+        if truncated:
+            self.pyboy.stop()
+            
+        # 根據終止類型決定是否重置
         if terminated:
             self.mario.reset_game()
+            self.mario.set_lives_left(10)
+        # 如果是 terminated_stop 則不重置，遊戲真正結束
             
         return state, reward, terminated, truncated, info
     
@@ -201,79 +195,59 @@ class MarioEnv(gym.Env):
     def calculate_reward(self):
         reward = 0.0
         
-        # 1. 進度獎勵 (最重要) - 鼓勵向右前進
+        # 根據 README.md 的 Reward System
+        
+        # 1. Game Over 懲罰: if pyboy.memory[0xC0A4] == 0x39
+        if self.pyboy.memory[0xC0A4] == 0x39:
+            reward -= 100
+        
+        # 2. 死亡/重生懲罰: if pyboy.memory[0xFFA6] == 0x90
+        if self.pyboy.memory[0xFFA6] == 0x90:
+            reward -= 100
+        
+        # 3. 進度獎勵: if level_progress + 1
         current_progress = self.progress()
+        if not hasattr(self, 'prev_progress'):
+            self.prev_progress = current_progress
+        
         progress_delta = current_progress - self.prev_progress
-        reward += progress_delta * 0.1  # 每前進一個單位給 0.1 分
+        if progress_delta > 0:
+            reward += progress_delta  # 每前進一個單位給 +1 分
         self.prev_progress = current_progress
         
-        # 2. 分數獎勵 - 鼓勵吃金幣、踩敵人
-        current_score = self.score()
-        score_delta = current_score - self.prev_score
-        reward += score_delta * 0.001  # 分數變化轉換為獎勵
-        self.prev_score = current_score
+        # 4. 變大/超級球獎勵: if pyboy.memory[0xFF99] == 0x02
+        if not hasattr(self, 'prev_power_state'):
+            self.prev_power_state = self.pyboy.memory[0xFF99]
         
-        # 3. 時間懲罰 - 避免拖延
-        # reward -= 0.01  # 每 tick 輕微懲罰
-        
-        # 修正後
-        if not hasattr(self, 'prev_lives'):
-            self.prev_lives = self.live()
-
-        if self.live() < self.prev_lives:
-            reward -= 50.0  # 失去生命時扣分
-        self.prev_lives = self.live()
-        
-        # 5. 站著不動懲罰 (檢測 x 位置是否改變)
-        current_x = self.pyboy.memory[0xC202]
-        if not hasattr(self, 'prev_x'):
-            self.prev_x = current_x
-        
-        if current_x == self.prev_x:
-            reward -= 0.05  # 沒移動就扣分
-        self.prev_x = current_x
-        
-        # 6. 金幣獎勵
-        if not hasattr(self, 'prev_coins'):
-            self.prev_coins = self.coins()
-        
-        coins_delta = self.coins() - self.prev_coins
-        if coins_delta > 0:
-            reward += 5.0 * coins_delta
-        self.prev_coins = self.coins()
+        current_power_state = self.pyboy.memory[0xFF99]
+        # 當從小變大時（0x00 → 0x02）給獎勵
+        if current_power_state == 0x02 and self.prev_power_state != 0x02:
+            reward += 100
+        self.prev_power_state = current_power_state
         
         return reward
 
     def reset(self, *, seed=42, options=None):
         super().reset(seed=seed)
-    
-        # 初始化所有追蹤變數
+        
+        # 添加重置
+        self.mario.set_lives_left(10)
+        
+        # 初始化追蹤變數
         self.prev_progress = self.progress()
-        self.prev_score = self.score()
-        self.prev_x = self.pyboy.memory[0xC202]
-        self.prev_coins = self.coins()
-        self.prev_lives = self.live()  # 初始化 prev_lives
+        self.prev_power_state = self.pyboy.memory[0xFF99]
         
         state = self.get_obs()
-        info = self.pyboy.game_wrapper
+        info = self.mario
         return state, info
     
     def get_obs(self):
-        # 根據 README.md，返回 12 個觀察值 (索引 0-11)
-        return np.array([
-            self.live(),                # 0: lives_left
-            self.score(),               # 1: score
-            self.time(),                # 2: time_left
-            self.progress(),            # 3: level_progress
-            self.coins(),               # 4: coins
-            self.world(),               # 5: world
-            self.stage(),               # 6: stage
-            self.pyboy.memory[0xC202],  # 7: mario x position
-            self.pyboy.memory[0xC201],  # 8: mario y position
-            self.pyboy.memory[0xC0A4],  # 9: game over
-            self.pyboy.memory[0xFF99],  # 10: power state
-            self.pyboy.memory[0xC207],  # 11: mario jump routine
-        ], dtype=np.float32)
+        game_state = [self.live(), self.score(), self.time(), self.progress(), self.coins(), self.world(), self.stage()]  # 7 個
+        mario_state = [self.pyboy.memory[0xC202], self.pyboy.memory[0xC201], self.pyboy.memory[0xC0A4], 
+                    self.pyboy.memory[0xFF99], self.pyboy.memory[0xC207], self.pyboy.memory[0xC203], self.pyboy.memory[0xFFA6]]  # 7 個
+        rom_table = [self.pyboy.memory[0xD100], self.pyboy.memory[0xD101], self.pyboy.memory[0xD102], 
+                    self.pyboy.memory[0xD103], self.pyboy.memory[0xD106], self.pyboy.memory[0xD108], 0]  # 補充至 7 個（添加 0）
+        return np.array([game_state, mario_state, rom_table], dtype=np.float16)  # 現在形狀一致 (3, 7)
 
 
 Transition = namedtuple('Transition',
@@ -298,9 +272,9 @@ class ReplayMemory(object):
 
 pyboy = PyBoy("rom.gb", window="SDL2", sound_volume=0)
 env = MarioEnv(pyboy)
-print(env.observation_space.shape)
+# print(env.observation_space.shape)
 
-BATCH_SIZE = 256
+BATCH_SIZE = 128
 GAMMA = 0.99
 EPS_START = 1.0
 EPS_END = 0.05          # 保留 5% 隨機
@@ -309,36 +283,44 @@ TAU = 0.001
 LR = 6.25e-5
 
 state, info = env.reset()
-print("Initial observation:", state)
+# print("Initial observation:", env.reset()[0])
+# print("Observation shape:", env.reset()[0].shape)
 
-n_observations = len(state)
+n_observations = env.reset()[0].shape[0]
 n_actions = env.action_space.n
 
-print("Observation space:", n_observations)
-print("Action space:", n_actions)
+# print("Observation space:", n_observations)
+# print("Action space:", n_actions)
 
 class DQN(nn.Module):
-
     def __init__(self, n_observations, n_actions):
         super(DQN, self).__init__()
-        self.layer1 = nn.Linear(n_observations, 128)
-        self.layer2 = nn.Linear(128, 128)
-        self.layer3 = nn.Linear(128, n_actions)
+        # 輸入: (batch, 3, 1, 7)
+        self.conv1 = nn.Conv2d(n_observations, 16, kernel_size=(1, 3), stride=1)  # 輸出: (batch, 16, 1, 5)
+        self.conv2 = nn.Conv2d(16, 32, kernel_size=(1, 3), stride=1)  # 輸出: (batch, 32, 1, 3)
+        self.flatten = nn.Flatten()
+        self.fc1 = nn.Linear(32 * 1 * 3, 128)  # 壓平後的全連接
+        self.fc2 = nn.Linear(128, n_actions)   # 輸出 Q 值
 
-    # Called with either one element to determine next action, or a batch
-    # during optimization. Returns tensor([[left0exp,right0exp]...]).
     def forward(self, x):
-        x = F.relu(self.layer1(x))
-        x = F.relu(self.layer2(x))
-        return self.layer3(x)
-    
-    
+        x = x.view(-1, 3, 1, 7)  # Reshape 為 (batch, 3, 1, 7)
+        x = F.relu(self.conv1(x))
+        x = F.relu(self.conv2(x))
+        x = self.flatten(x)
+        x = F.relu(self.fc1(x))
+        return self.fc2(x)
+
+# 初始化網路
 policy_net = DQN(n_observations, n_actions).to(device)
 target_net = DQN(n_observations, n_actions).to(device)
 target_net.load_state_dict(policy_net.state_dict())
+target_net.eval()
 
-optimizer = optim.AdamW(policy_net.parameters(), lr=LR, amsgrad=True)
-memory = ReplayMemory(10000)
+optimizer = optim.Adam(policy_net.parameters(), lr=LR)
+memory = ReplayMemory(100000)  # 經驗回放緩衝區
+
+# print(policy_net)
+# print(target_net)
 
 steps_done = 0
 
@@ -357,8 +339,7 @@ def select_action(state):
             return policy_net(state).max(1).indices.view(1, 1)
     else:
         return torch.tensor([[np.random.randint(n_actions)]], device=device, dtype=torch.long)
-            
-
+    
 def optimize_model():
     if len(memory) < BATCH_SIZE:
         return
@@ -405,45 +386,37 @@ def optimize_model():
     torch.nn.utils.clip_grad_value_(policy_net.parameters(), 100)
     optimizer.step()
     
-    
-if torch.cuda.is_available() or torch.backends.mps.is_available():
-    num_episodes = 600
-else:
-    num_episodes = 50
 
-for i_episode in range(num_episodes):
-    # Initialize the environment and get its state
+# 添加訓練迴圈
+for episode in range(10):  # 範例 10 集
     state, info = env.reset()
-    state = torch.tensor(state, dtype=torch.float32, device=device).unsqueeze(0)
-    while pyboy.tick():
+    state = torch.tensor(state, dtype=torch.float32, device=device)
+    while pyboy.tick():  # 每集 100 步
         action = select_action(state)
-        observation, reward, terminated, truncated, _ = env.step(action.item())
+        next_state, reward, terminated, truncated, info = env.step(action.item())
         reward = torch.tensor([reward], device=device)
         done = terminated or truncated
 
-        if terminated:
+        if done:
             next_state = None
         else:
-            next_state = torch.tensor(observation, dtype=torch.float32, device=device).unsqueeze(0)
+            next_state = torch.tensor(next_state, dtype=torch.float32, device=device)
 
-        # Store the transition in memory
+        # 儲存經驗
         memory.push(state, action, next_state, reward)
-
-        # Move to the next state
         state = next_state
 
-        # Perform one step of the optimization (on the policy network)
+        # 優化模型
         optimize_model()
 
-        # Soft update of the target network's weights
-        # θ′ ← τ θ + (1 −τ )θ′
+        if done:
+            break
+        
+        # print(state)
+
+        # 更新目標網路
         target_net_state_dict = target_net.state_dict()
         policy_net_state_dict = policy_net.state_dict()
         for key in policy_net_state_dict:
-            target_net_state_dict[key] = policy_net_state_dict[key]*TAU + target_net_state_dict[key]*(1-TAU)
+            target_net_state_dict[key] = policy_net_state_dict[key] * TAU + target_net_state_dict[key] * (1 - TAU)
         target_net.load_state_dict(target_net_state_dict)
-        
-        if done:
-            break
-    pyboy.stop()
-
