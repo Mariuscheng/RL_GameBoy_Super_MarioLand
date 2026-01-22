@@ -43,24 +43,27 @@ class MarioEnv(gym.Env):
         self.pyboy = pyboy
         self.mario = self.pyboy.game_wrapper
         
-        # 假設新觀察形狀為 (3, 7)，重新定義 low 和 high
-        # 基於原來的範圍，分組為 3 行，每行 7 個元素
-        # 注意：調整值以匹配您的實際範圍（例如，rom_table 的 high 可能不同）
-        # 統一為 (3, 7)，補充 rom_table 至 7 個元素（例如，添加 0 或移除一個）
+        # Observation space: flattened 17 elements
+        # game_state (5): lives, score, time, progress, coins
+        # mario_state (5): x_pos, y_pos, power_state, jump_routine, pose
+        # enemy (5): enemy statuses (booleans)
+        # additional (2): ground_flag, power_status_timer
         low = np.array([
-            [0, 0, 0, 250, 0, 1, 1],      # game_state: lives, score, time, progress, coins, world, stage
-            [0, 0, 0, 0, 0, 0, 0],        # mario_state: x_pos, y_pos, game_over, power_state, jump_routine, pose, timer=
-            [0, 0, 0, 0, 0, 0, 0]         # rom_table: 記憶體值
+            0, 0, 0, 0, 0,      # game_state
+            0, 0, 0, 0, 0,        # mario_state
+            0, 0, 0, 0, 0,        # enemy
+            64, 0                   # additional
         ], dtype=np.float32)
         
         high = np.array([
-            [99, 999999, 400, 2601, 99, 4, 3],  # game_state (7)
-            [81, 134, 57, 4, 2, 5, 255],        # mario_state (7)
-            [255, 255, 255, 255, 255, 255, 255]  # rom_table (補充至 7)
+            99, 999999, 400, 2601, 99,  # game_state
+            81, 134, 4, 2, 5,           # mario_state
+            1, 1, 1, 1, 1,               # enemy
+            144, 2                         # additional
         ], dtype=np.float32)
         
         self.action_space = Discrete(len(Actions))
-        self.observation_space = spaces.Box(low, high,  shape=low.shape, dtype=np.float32)
+        self.observation_space = spaces.Box(low, high, shape=(17,), dtype=np.float32)
         
         self.mario.start_game()
         self.mario.set_lives_left(10)
@@ -154,9 +157,6 @@ class MarioEnv(gym.Env):
         terminated = (self.live() == 0 or self.time() == 0)
         # terminated(Stop)：進度=2601 時停止遊戲
         truncated = (self.progress() == 2601)
-        
-        
-        truncated = False  # 不使用 truncated 信號
 
         state = self.get_obs()
         
@@ -170,6 +170,12 @@ class MarioEnv(gym.Env):
         # 如果是 terminated_stop 則不重置，遊戲真正結束
             
         return state, reward, terminated, truncated, info
+    
+    def mario_x(self):
+        return self.pyboy.memory[0xC202]
+    
+    def mario_y(self):
+        return self.pyboy.memory[0xC201]
     
     def live(self):
         return self.mario.lives_left
@@ -191,6 +197,38 @@ class MarioEnv(gym.Env):
     
     def stage(self):
         return self.mario.world[1]
+    
+    def stage_over(self):
+        return self.progress() == 2601
+    
+    def is_died(self):
+        return self.pyboy.memory[0xFFA6] == 0x90
+    
+    def power_status(self):
+        status_map = {0x00: 0, 0x01: 1, 0x02: 2}
+        return status_map.get(self.pyboy.memory[0xFF99], -1)
+    
+    def superball_status(self):
+        status_map = {0x00: 0, 0x02: 1}
+        return status_map.get(self.pyboy.memory[0xFF99], -1)
+    
+    def ENEMY_STATUS(self):
+        enemy_map = {0x00: 0, 0x01: 1, 0x02: 2, 0x03: 3, 0x04: 4, 0x05: 5, 0x06: 6, 0x42: 7, 0x08: 8, 0x61: 9}
+        return enemy_map.get(self.pyboy.memory[0xD100], -1)
+          
+    def player_status(self):
+        player_map = {0x09: 0, 0x1B: 1, 0x1D: 2}
+        return player_map.get(self.pyboy.memory[0xD100], -1)
+        
+    def power_status_timer(self):
+        power_map = {0x40: 0, 0x50: 1, 0x90: 2}
+        return power_map.get(self.pyboy.memory[0xFFA6], -1)
+        
+            
+    def ground_flag(self):
+        ground_flag = [0x00, 0x01]
+        if self.pyboy.memory[0xC20A] in ground_flag:
+            return ground_flag.index(self.pyboy.memory[0xC20A])
     
     def calculate_reward(self):
         reward = 0.0
@@ -215,7 +253,17 @@ class MarioEnv(gym.Env):
             reward += progress_delta  # 每前進一個單位給 +1 分
         self.prev_progress = current_progress
         
-        # 4. 變大/超級球獎勵: if pyboy.memory[0xFF99] == 0x02
+        # 4. 硬幣獎勵
+        current_coins = self.coins()
+        if not hasattr(self, 'prev_coins'):
+            self.prev_coins = current_coins
+        
+        coins_delta = current_coins - self.prev_coins
+        if coins_delta > 0:
+            reward += coins_delta * 10  # 每收集一個硬幣 +10 分
+        self.prev_coins = current_coins
+        
+        # 5. 變大/超級球獎勵: if pyboy.memory[0xFF99] == 0x02
         if not hasattr(self, 'prev_power_state'):
             self.prev_power_state = self.pyboy.memory[0xFF99]
         
@@ -224,6 +272,22 @@ class MarioEnv(gym.Env):
         if current_power_state == 0x02 and self.prev_power_state != 0x02:
             reward += 100
         self.prev_power_state = current_power_state
+        
+        # 6. 擊敗敵人獎勵
+        if not hasattr(self, 'prev_enemy_status'):
+            self.prev_enemy_status = self.ENEMY_STATUS()
+        
+        current_enemy_status = self.ENEMY_STATUS()
+        if current_enemy_status == 0 and self.prev_enemy_status != 0:
+            reward += 50  # 擊敗敵人給 +50 分
+        self.prev_enemy_status = current_enemy_status
+        
+        # 7. 完成關卡獎勵
+        if self.stage_over():
+            reward += 1000  # 完成關卡給 +1000 分
+        
+        # 8. 時間懲罰：鼓勵快速完成
+        reward -= 0.1
         
         return reward
 
@@ -236,18 +300,32 @@ class MarioEnv(gym.Env):
         # 初始化追蹤變數
         self.prev_progress = self.progress()
         self.prev_power_state = self.pyboy.memory[0xFF99]
+        self.prev_coins = self.coins()
+        self.prev_enemy_status = self.ENEMY_STATUS()
         
         state = self.get_obs()
         info = self.mario
         return state, info
     
     def get_obs(self):
-        game_state = [self.live(), self.score(), self.time(), self.progress(), self.coins(), self.world(), self.stage()]  # 7 個
-        mario_state = [self.pyboy.memory[0xC202], self.pyboy.memory[0xC201], self.pyboy.memory[0xC0A4], 
-                    self.pyboy.memory[0xFF99], self.pyboy.memory[0xC207], self.pyboy.memory[0xC203], self.pyboy.memory[0xFFA6]]  # 7 個
-        rom_table = [self.pyboy.memory[0xD100], self.pyboy.memory[0xD101], self.pyboy.memory[0xD102], 
-                    self.pyboy.memory[0xD103], self.pyboy.memory[0xD106], self.pyboy.memory[0xD108], 0]  # 補充至 7 個（添加 0）
-        return np.array([game_state, mario_state, rom_table], dtype=np.float32)  # 現在形狀一致 (3, 7)
+        return np.array([self.live(), 
+                        self.coins(),
+                        self.progress(),
+                        self.score(),
+                        self.time(),
+                        self.world(),
+                        self.stage(),
+                        self.mario_x(),
+                        self.mario_y(),
+                        self.power_status(),
+                        self.ENEMY_STATUS(),
+                        self.player_status(),
+                        self.superball_status(),
+                        self.is_died(),
+                        self.stage_over(),
+                        self.ground_flag(),
+                        self.power_status_timer()
+                         ], dtype=np.float32)  # shape (17,)
 
 
 Transition = namedtuple('Transition',
@@ -277,50 +355,43 @@ env = MarioEnv(pyboy)
 BATCH_SIZE = 128
 GAMMA = 0.99
 EPS_START = 1.0
-EPS_END = 0.05          # 保留 5% 隨機
-EPS_DECAY = 5000000      # 約 120~150 萬步才降到 0.1 左右
+EPS_END = 0.1          # 保留 10% 隨機
+EPS_DECAY = 500000      # 增加衰減步數，讓探索持續更長
 TAU = 0.001
-LR = 6.25e-5
+LR = 1e-4
 
 state, info = env.reset()
-# print("Initial observation:", env.reset()[0])
-# print("Observation shape:", env.reset()[0].shape)
+print("Initial observation:", state)
 
-n_observations = env.reset()[0].shape[0]
+n_observations = len(state)
 n_actions = env.action_space.n
 
-# print("Observation space:", n_observations)
-# print("Action space:", n_actions)
+print("Observation space:", n_observations)
+print("Action space:", n_actions)
 
 class DQN(nn.Module):
+
     def __init__(self, n_observations, n_actions):
         super(DQN, self).__init__()
-        # 輸入: (batch, 3, 1, 7)
-        self.conv1 = nn.Conv2d(n_observations, 16, kernel_size=(1, 3), stride=1)  # 輸出: (batch, 16, 1, 5)
-        self.conv2 = nn.Conv2d(16, 32, kernel_size=(1, 3), stride=1)  # 輸出: (batch, 32, 1, 3)
-        self.flatten = nn.Flatten()
-        self.fc1 = nn.Linear(32 * 1 * 3, 128)  # 壓平後的全連接
-        self.fc2 = nn.Linear(128, n_actions)   # 輸出 Q 值
+        self.layer1 = nn.Linear(n_observations, 128)
+        self.layer2 = nn.Linear(128, 128)
+        self.layer3 = nn.Linear(128, n_actions)
 
+    # Called with either one element to determine next action, or a batch
+    # during optimization. Returns tensor([[left0exp,right0exp]...]).
     def forward(self, x):
-        x = x.view(-1, 3, 1, 7)  # Reshape 為 (batch, 3, 1, 7)
-        x = F.relu(self.conv1(x))
-        x = F.relu(self.conv2(x))
-        x = self.flatten(x)
-        x = F.relu(self.fc1(x))
-        return self.fc2(x)
+        x = F.relu(self.layer1(x))
+        x = F.relu(self.layer2(x))
+        return self.layer3(x)
+    
 
-# 初始化網路
 policy_net = DQN(n_observations, n_actions).to(device)
 target_net = DQN(n_observations, n_actions).to(device)
 target_net.load_state_dict(policy_net.state_dict())
-target_net.eval()
 
-optimizer = optim.Adam(policy_net.parameters(), lr=LR)
-memory = ReplayMemory(100000)  # 經驗回放緩衝區
+optimizer = optim.AdamW(policy_net.parameters(), lr=LR, amsgrad=True)
+memory = ReplayMemory(10000)
 
-# print(policy_net)
-# print(target_net)
 
 steps_done = 0
 
@@ -339,6 +410,7 @@ def select_action(state):
             return policy_net(state).max(1).indices.view(1, 1)
     else:
         return torch.tensor([[np.random.randint(n_actions)]], device=device, dtype=torch.long)
+    
     
 def optimize_model():
     if len(memory) < BATCH_SIZE:
@@ -386,43 +458,47 @@ def optimize_model():
     torch.nn.utils.clip_grad_value_(policy_net.parameters(), 100)
     optimizer.step()
     
+    
 if torch.cuda.is_available() or torch.backends.mps.is_available():
     num_episodes = 600
 else:
     num_episodes = 50
-    
-# 添加訓練迴圈
-for episode in range(num_episodes):
+
+for i_episode in range(num_episodes):
+    episode_reward = 0
+    # Initialize the environment and get its state
     state, info = env.reset()
-    state = torch.tensor(state, dtype=torch.float32, device=device)
-    while pyboy.tick():  # 每集 100 步
+    state = torch.tensor(state, dtype=torch.float32, device=device).unsqueeze(0)
+    while pyboy.tick():
         action = select_action(state)
-        next_state, reward, terminated, truncated, info = env.step(action.item())
-        reward = torch.tensor([reward], device=device)
+        observation, reward, terminated, truncated, _ = env.step(action.item())
+        episode_reward += reward
         done = terminated or truncated
 
         if done:
             next_state = None
         else:
-            next_state = torch.tensor(next_state, dtype=torch.float32, device=device)
+            next_state = torch.tensor(observation, dtype=torch.float32, device=device).unsqueeze(0)
 
-        # 儲存經驗
+        reward = torch.tensor([reward], device=device)
+
+        # Store the transition in memory
         memory.push(state, action, next_state, reward)
+
+        # Move to the next state
         state = next_state
 
-        # 優化模型
+        # Perform one step of the optimization (on the policy network)
         optimize_model()
 
-        if done:
-            break
-        
-        # print(state)
-
-        # 更新目標網路
+        # Soft update of the target network's weights
+        # θ′ ← τ θ + (1 −τ )θ′
         target_net_state_dict = target_net.state_dict()
         policy_net_state_dict = policy_net.state_dict()
         for key in policy_net_state_dict:
-            target_net_state_dict[key] = policy_net_state_dict[key] * TAU + target_net_state_dict[key] * (1 - TAU)
+            target_net_state_dict[key] = policy_net_state_dict[key]*TAU + target_net_state_dict[key]*(1-TAU)
         target_net.load_state_dict(target_net_state_dict)
 
-
+        if done:
+            print(f"Episode {i_episode + 1}: Total reward {episode_reward}")
+            break

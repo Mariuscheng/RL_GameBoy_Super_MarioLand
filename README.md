@@ -1,79 +1,126 @@
-# GameBoy Super Mario land (A.I improve)
+# DQN Super Mario Land
 
-## Observation Space (9,)
+這個項目使用深度Q網路 (DQN) 訓練AI代理玩Super Mario Land遊戲。使用PyBoy模擬器、Gymnasium強化學習框架和PyTorch神經網路庫。
 
+## 功能特點
 
-| Num | Observation                               | Description                                                                                                                          | Source                   | Min | Max    |
-| :---- | :------------------------------------------ | :------------------------------------------------------------------------------------------------------------------------------------- | -------------------------- | ----- | :------- |
-| 0   | lives_left                                | The number of lives Mario has left.                                                                                                  | PyBoy MarioLand API      | 0   | 99     |
-| 1   | socre                                     | The score provided by the game                                                                                                       | PyBoy MarioLand API      | 0   | 999999 |
-| 2   | time_left                                 | The number of seconds left to finish the level.                                                                                      | PyBoy MarioLand API      | 0   | 400    |
-| 3   | level_progress                            | An integer of the current "global" X position in this level. Can be used for AI scoring.                                             | PyBoy MarioLand API      | 250 | 2601   |
-| 4   | coins                                     | The number of collected coins.                                                                                                       | PyBoy MarioLand API      | 0   | 99     |
-| 5   | World                                     | Provides the current "world" Mario is in, as a tuple of as two integers (world, level).                                              | PyBoy MarioLand API      | 1   | 4      |
-| 6   | Stage                                     | Provides the current "world" Mario is in, as a tuple of as two integers (world, level). Python code : World[1]                       | PyBoy MarioLand API      | 1   | 3      |
-| 7   | mario x position (pyboy.memory[0xC202])   | Mario's X position relative to the screen                                                                                            | Super Mario Land/RAM map | 0   | 81     |
-| 8   | mario y position (pyboy.memory[0xC201])   | Mario's Y position relative to the screen                                                                                            | Super Mario Land/RAM map | 0   | 134    |
-| 9   | Game Over (pyboy.memory[0xC0A4])          | ? (0x39 = Game Over)                                                                                                                 | Super Mario Land/RAM map | 0   | 57     |
-| 10  | Power State (pyboy.memory[0xFF99])        | Powerup Status (0x00 = small, 0x01 = growing, 0x02 = big with or without superball, 0x03 = shrinking, 0x04 = invincibility blinking) | Super Mario Land/RAM map | 0   | 4      |
-| 11  | Mario jump routine (pyboy.memory[0xC207]) | Probably used in Mario's jump routine. (0x00 = Not jumping, 0x01 = Ascending, 0x02 = Descending)                                     | Super Mario Land/RAM map | 0   | 2      |
+- 使用CNN架構的DQN代理
+- 自定義的Mario環境，基於PyBoy和Gymnasium
+- 經驗回放記憶體
+- ε-貪婪策略進行動作選擇
+- 目標網路更新
 
-## Action Space (GameBoy)
+## 依賴項
 
+- Python 3.8+
+- PyTorch
+- Gymnasium
+- PyBoy
+- NumPy
 
-| Button               | Action                           |
-| :--------------------- | ---------------------------------- |
-| Up                   | Up                               |
-| Down                 | Down                             |
-| Left                 | Left                             |
-| Right                | Right                            |
-| Fire                 | B                                |
-| Jump                 | A                                |
-| Run                  | B(LongPress) + Right/Left        |
-| Right-Jump/Left-Jump | B(LongPress) + Right/Left + Jump |
+## 安裝
 
-## Reward
+1. 安裝Python依賴項：
 
+   ```bash
+   pip install torch gymnasium pyboy numpy
+   ```
+2. 確保有Super Mario Land ROM文件 (`rom.gb`) 在項目根目錄。
 
-| Item                  | Reward System(One Time) |
-| :---------------------- | ------------------------- |
-| if lives_left - 1     | - 50                    |
-| if level_progress + 1 | + 1                     |
-| if lives_left = 0     | - 100                   |
-| Power_state + 1       | + 100                   |
-| Power_state = 0       | - 100                   |
+## 使用方法
 
-## terminated(運行mario.reset_game())
+運行訓練腳本：
 
+```bash
+python main.py
+```
 
-| Item              | Terminated Condition |
-| :------------------ | ---------------------- |
-| if lives_left = 0 | mario.reset_game()   |
-| if time_left = 0  | mario.reset_game()   |
+腳本將開始訓練DQN代理玩Super Mario Land。
 
-## terminated(運行pyboy.stop() )
+## 環境描述
 
+### 觀察空間 (Observation Space)
 
-| Item           | Terminated Condition |
-| :--------------- | ---------------------- |
-| level_progress | = 2601 (Goal)        |
+觀察空間是一個形狀為 (17,) 的numpy array，dtype=float32，包含遊戲狀態、Mario狀態和敵人狀態。
 
-## truncated
+| 索引 | 觀察項目           | 描述                  | 來源                | 最小值 | 最大值 |
+| ---- | ------------------ | --------------------- | ------------------- | ------ | ------ |
+| 0    | lives_left         | Mario剩餘生命數       | PyBoy MarioLand API | 0      | 99     |
+| 1    | coins              | 收集的金幣數          | PyBoy MarioLand API | 0      | 99     |
+| 2    | level_progress     | 關卡進度（全局X位置） | PyBoy MarioLand API | 0      | 2601   |
+| 3    | score              | 遊戲分數              | PyBoy MarioLand API | 0      | 999999 |
+| 4    | time_left          | 剩餘時間（秒）        | PyBoy MarioLand API | 0      | 400    |
+| 5    | world              | 當前世界              | PyBoy MarioLand API | 0      | 4      |
+| 6    | stage              | 當前關卡              | PyBoy MarioLand API | 0      | 3      |
+| 7    | mario_x            | Mario X位置           | RAM 0xC202          | 0      | 81     |
+| 8    | mario_y            | Mario Y位置           | RAM 0xC201          | 0      | 134    |
+| 9    | power_status       | 力量狀態              | RAM 0xFF99          | 0      | 4      |
+| 10   | enemy_status       | 敵人狀態              | RAM 0xD100          | 0      | 255    |
+| 11   | player_status      | 玩家狀態              | RAM 0xD100          | 0      | 2      |
+| 12   | superball_status   | 超級球狀態            | RAM 0xFF99          | 0      | 2      |
+| 13   | is_died            | 死亡標誌              | RAM 0xFFA6          | 0      | 1      |
+| 14   | stage_over         | 關卡結束標誌          | level_progress      | 0      | 1      |
+| 15   | ground_flag        | 地面標誌              | RAM 0xC20A          | 0      | 1      |
+| 16   | power_status_timer | 力量狀態計時器        | RAM 0xFFA6          | 0      | 2      |
 
+### 動作空間 (Action Space)
 
-| Item     | Truncated Condition |
-| :--------- | --------------------- |
-| 最大步數 | = 2601              |
+動作空間是離散的，有13個可能動作：
 
-## Sample
+| 動作值 | 動作名稱    | 描述              |
+| ------ | ----------- | ----------------- |
+| 0      | NOOP        | 無操作            |
+| 1      | LEFT        | 向左移動          |
+| 2      | RIGHT       | 向右移動          |
+| 3      | UP          | 向上移動          |
+| 4      | JUMP        | 跳躍 (A鍵)        |
+| 5      | FIRE        | 發射 (B鍵)        |
+| 6      | LEFT_PRESS  | 按左鍵            |
+| 7      | RIGHT_PRESS | 按右鍵            |
+| 8      | JUMP_PRESS  | 按跳躍鍵          |
+| 9      | LEFT_RUN    | 跑步向左 (B + 左) |
+| 10     | RIGHT_RUN   | 跑步向右 (B + 右) |
+| 11     | LEFT_JUMP   | 跳躍向左 (A + 左) |
+| 12     | RIGHT_JUMP  | 跳躍向右 (A + 右) |
 
-1. Initial observation: [  2.   0. 400. 251.   0.   1.   1.  50. 134.   0.   0.   0.]
-2. Observation space: 12
-3. Action space: 13
+### 獎勵系統 (Reward System)
 
-## Reference
+| 條件                                     | 獎勵         |
+| ---------------------------------------- | ------------ |
+| 遊戲結束 (pyboy.memory[0xC0A4] == 0x39)  | -100         |
+| 死亡/重生 (pyboy.memory[0xFFA6] == 0x90) | -100         |
+| 關卡進度增加                             | +進度差值    |
+| 收集金幣                                 | +金幣數 * 10 |
+| 獲得力量 (從小變大)                      | +100         |
+| 每步時間懲罰                             | -0.1         |
 
-- [Gym Retro](https://gymnasium.farama.org/)
-- [PyBoy API](https://docs.pyboy.dk/index.html)
+### 終止條件 (Termination Conditions)
+
+- **terminated**: 生命值為0或時間為0時重置遊戲
+- **truncated**: 進度達到2601（通關）時停止遊戲
+
+## DQN架構
+
+- **輸入**: (batch, 17)
+- **FC1**: 128個神經元
+- **FC2**: 128個神經元
+- **FC3**: 13個輸出 (動作數)
+
+## 訓練參數
+
+- **BATCH_SIZE**: 64
+- **GAMMA**: 0.99
+- **EPS_START**: 1.0
+- **EPS_END**: 0.1
+- **EPS_DECAY**: 500000
+- **TAU**: 0.001
+- **LR**: 1e-4
+- **MEMORY_SIZE**: 100000
+
+## 參考資料
+
+- [Gymnasium](https://gymnasium.farama.org/)
+- [PyBoy Documentation](https://docs.pyboy.dk/)
 - [PyBoy Mario Land API](https://docs.pyboy.dk/plugins/game_wrapper_super_mario_land.html)
-- [Super Mario Land Ram Map Wiki](https://datacrystal.tcrf.net/wiki/Super_Mario_Land/RAM_map)
+- [Super Mario Land RAM Map](https://datacrystal.tcrf.net/wiki/Super_Mario_Land/RAM_map)
+- [PyTorch DQN Tutorial](https://pytorch.org/tutorials/intermediate/reinforcement_q_learning.html)
