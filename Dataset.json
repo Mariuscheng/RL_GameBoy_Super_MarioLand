@@ -1,0 +1,742 @@
+[
+  {
+    "instruction": "解釋 Super Mario Land 中記憶體位址 0xFFA6 的意義，以及值 0x90 代表什麼。",
+    "input": "位址：$FFA6 = 0x90",
+    "output": "0xFFA6 是 Time until respawn from death（死亡後重生等待時間）的位址。當 Mario 掉進坑或被敵人殺死時，遊戲會把這個位址設為 0x90（NTSC 約 144 frames ≈ 2.4 秒），用來倒數 Mario 重生的等待時間。"
+  },
+  {
+    "instruction": "給定遊戲事件，預測相關 RAM 變化",
+    "input": "Mario 掉進無底洞（pit death）",
+    "output": "遊戲會設定 $FFA6 ← #$90 作為 respawn timer（重生計時器）。"
+  },
+  {
+    "instruction": "當 0xFFA6 = 0x90 時，Mario 現在處於什麼狀態？",
+    "input": "",
+    "output": "Mario 正在死亡重生倒數中（計時器設為 0x90，約 2.4 秒後重生）。這通常發生在掉進坑底或被敵人殺死的情況。"
+  },
+  {
+    "instruction": "把以下 disassembly 註解翻譯成自然語言說明",
+    "input": "LDA #$90\nSTA $FFA6     ; set death respawn timer",
+    "output": "載入立即數 0x90 到累加器，然後存到記憶體位址 $FFA6，用來設定死亡後的重生計時器。"
+  },
+  {
+    "instruction": "解釋 Super Mario Land 中記憶體位址 0xD100 的值代表什麼意義。",
+    "input": "位址：$D100 = 0x00",
+    "output": "在 Super Mario Land 中，0xD100 是敵人狀態或敵人類型的指標。當值為 0x00 時，表示 Mario 目前遇到的是 Chibibo（也就是 Goomba，栗子怪）。這個值會根據畫面上出現的敵人而變化。"
+  },
+  {
+    "instruction": "解釋 Super Mario Land 中記憶體位址 0xD100 = 0x01 的值代表什麼意義。",
+    "input": "位址：$D100 = 0x01",
+    "output": "在 Super Mario Land 中，0xD100 是敵人狀態或敵人類型的指標。當值為 0x01 時，表示 Mario 目前遇到的是 Flattened Chibibo（也就是 扁平的 Goomba，扁平栗子怪）。這個值會根據畫面上出現的敵人而變化。"
+  },
+  {
+    "instruction": "解釋 Super Mario Land 中記憶體位址 0xD100 = 0x02 的值代表什麼意義。",
+    "input": "位址：$D100 = 0x02",
+    "output": "在 Super Mario Land 中，0xD100 是敵人狀態或敵人類型的指標。當值為 0x02 時，表示 Mario 目前遇到的是 Pakkun (Piranha Plant) 。這個值會根據畫面上出現的敵人而變化。"
+  },
+  {
+    "instruction": "解釋 Super Mario Land 中記憶體位址 0xD100 = 0x03 的值代表什麼意義。",
+    "input": "位址：$D100 = 0x03",
+    "output": "在 Super Mario Land 中，0xD100 是敵人狀態或敵人類型的指標。當值為 0x03 時，表示 Mario 目前遇到的是 Invisible Flying Bat thing（隱形飛行蝙蝠）。這個值會根據畫面上出現的敵人而變化。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x04",
+    "input": "位址：$D100 = 0x04",
+    "output": "Nokobon（Koopa-like）：步行的烏龜類敵人，可被跳踏（踩頭）消滅；部分情況會收回殼或以其他方式攻擊。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x05",
+    "input": "位址：$D100 = 0x05",
+    "output": "Nokobon 投擲物：由 Nokobon 發射或掉落的爆裂物，與主體分離並會對玩家造成傷害。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x06",
+    "input": "位址：$D100 = 0x06",
+    "output": "拳擊手（Punching Hand）：短距離伸出攻擊的手型物件，接觸即傷害 Mario，通常出現在平台或牆邊。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x07",
+    "input": "位址：$D100 = 0x07",
+    "output": "升起平台（Rising platform）：玩家踩上後會上升，能當作移動平台或用以到達較高處；可作為關卡互動要素。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x08",
+    "input": "位址：$D100 = 0x08",
+    "output": "1-3 Boss（Boss part / phase）：1-3 關卡用的 Boss 或 Boss 的構成元件，通常具有特定移動模式與攻擊。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x09",
+    "input": "位址：$D100 = 0x09",
+    "output": "可踩型敵人（Stompable）：可以藉由跳踏消滅，碰撞通常會導致死亡或變為死亡動畫。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x0A",
+    "input": "位址：$D100 = 0x0A",
+    "output": "下落平台（Falling platform）：玩家通過或踩踏後會從原位掉落，常作為短暫支撐。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x0B",
+    "input": "位址：$D100 = 0x0B",
+    "output": "左右移動平台（Horizontal moving platform）：在水平方向來回移動，可當作可站立的移動支撐。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x0C",
+    "input": "位址：$D100 = 0x0C",
+    "output": "1-2 關的下落磚塊：會在玩家接近時掉落的地磚/磚塊，用於製造陷阱或通行限制。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x0D",
+    "input": "位址：$D100 = 0x0D",
+    "output": "未知／保留（未在原始頁面明確描述，可能為空槽或特定情況下才使用）。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x0E",
+    "input": "位址：$D100 = 0x0E",
+    "output": "跳躍型蝙蝠：會做彈跳或拋物線移動的飛行敵人，可在空中接觸玩家造成傷害。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x0F",
+    "input": "位址：$D100 = 0x0F",
+    "output": "跳躍蝙蝠的死亡動畫或死亡狀態：敵人被消滅後顯示的動畫或效果。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x10",
+    "input": "位址：$D100 = 0x10",
+    "output": "跳躍魚（Jumping fish）：水中出現，會跳出水面做弧線攻擊玩家，接觸即傷害。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x11",
+    "input": "位址：$D100 = 0x11",
+    "output": "未知（原頁標示未使用或行為不明），保留為未確定。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x12",
+    "input": "位址：$D100 = 0x12",
+    "output": "未知（原頁標示未使用或行為不明），保留為未確定。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x13",
+    "input": "位址：$D100 = 0x13",
+    "output": "升起平台（同 0x07）：功能等同於其他升起式平台，供玩家站立並上升。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x14",
+    "input": "位址：$D100 = 0x14",
+    "output": "自動升起平台：會在不需玩家踩踏下自行上升的移動平台。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x15",
+    "input": "位址：$D100 = 0x15",
+    "output": "跳躍蝙蝠死亡效果：用於表現蝙蝠被消滅時的特殊音效或視覺效果。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x16",
+    "input": "位址：$D100 = 0x16",
+    "output": "火球（Projectile）：敵人發射的攻擊性投射物，接觸即對 Mario 造成傷害。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x17",
+    "input": "位址：$D100 = 0x17",
+    "output": "1-3 Boss 片段：Boss 的一部分，以逆時針移動的軌道出現，移動結束後消失。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x18",
+    "input": "位址：$D100 = 0x18",
+    "output": "延遲攻擊型投射物：類似火球，但會有等待/蓄力後才發動攻擊的行為。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x19",
+    "input": "位址：$D100 = 0x19",
+    "output": "通用死亡音效/效果（對應特定敵人的死亡事件）。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x1A",
+    "input": "位址：$D100 = 0x1A",
+    "output": "水關上升物（Water-level rising object）：在 2-3 水下關出現，會持續上升，通常受牆壁或範圍限制。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x1B",
+    "input": "位址：$D100 = 0x1B",
+    "output": "上方火球：比常見火球高度更高的投射物，呈弧線或直線移動，接觸即傷害。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x1C",
+    "input": "位址：$D100 = 0x1C",
+    "output": "未知（原頁未明確描述），保留為未確定條目。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x1D",
+    "input": "位址：$D100 = 0x1D",
+    "output": "跳躍型斯芬克斯類（Sphinx-like jumper）：會在空中或平台上跳躍並以特定軌跡攻擊的敵人。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x1E",
+    "input": "位址：$D100 = 0x1E",
+    "output": "下方火球：低軌道移動的火球，貼近地面，主要威脅沿地面移動的玩家。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x1F",
+    "input": "位址：$D100 = 0x1F",
+    "output": "飛行 Boss 球體：Boss 所產生的球形投射物，通常有預定軌跡且不可踩踏。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x20",
+    "input": "位址：$D100 = 0x20",
+    "output": "類似跳躍蝙蝠的物件：可能為小型飛行敵或短暫出現的飛行障礙，行為接近 0x0E 類型。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x21",
+    "input": "位址：$D100 = 0x21",
+    "output": "爆炸裝置（Water-level bomb）：在水關出現，爆炸後會向外發射兩顆子彈或碎片，造成範圍傷害。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x22",
+    "input": "位址：$D100 = 0x22",
+    "output": "低位 Boss 球體：較接近地面的 Boss 投射物，會沿曲線或直線移動。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x23",
+    "input": "位址：$D100 = 0x23",
+    "output": "彈跳球（Bouncing ball）：在地面或碰到牆壁時會反彈，多次接觸會對玩家造成傷害。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x24",
+    "input": "位址：$D100 = 0x24",
+    "output": "高跳怪：跳躍高度高且可通過多層平台的敵人，通常用來填充垂直空間。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x25",
+    "input": "位址：$D100 = 0x25",
+    "output": "路過觸發升起物：靠近時升起可站立的物件，玩家可跳踏將其消滅，消滅時伴隨特定音效。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x26",
+    "input": "位址：$D100 = 0x26",
+    "output": "未知（原頁未明確），保留為未確定條目。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x27",
+    "input": "位址：$D100 = 0x27",
+    "output": "爆炸效果（Explosion）：用於表現敵人或物件爆炸後的視覺／音效事件。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x28",
+    "input": "位址：$D100 = 0x28",
+    "output": "可穿越右移裝飾（Pass-through right-moving mushroom-like）：裝飾性物件，可被玩家穿越，不會造成碰撞傷害，向右移動。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x29",
+    "input": "位址：$D100 = 0x29",
+    "output": "可穿越左移裝飾（Pass-through left-moving）：與 0x28 類似但向左移動。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x2A",
+    "input": "位址：$D100 = 0x2A",
+    "output": "可穿越的右移心形（Pass-through right-moving heart）：裝飾性或道具型圖案，向右移動，通常不可互動。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x2B",
+    "input": "位址：$D100 = 0x2B",
+    "output": "可穿越的左移心形（Pass-through left-moving heart）：與 0x2A 相對方向版本。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x2C",
+    "input": "位址：$D100 = 0x2C",
+    "output": "可穿越的右移星星：裝飾性或背景元素，向右移動，通常不與玩家碰撞。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x2D",
+    "input": "位址：$D100 = 0x2D",
+    "output": "空中花朵（Pass-through airborne flower）：在空中略高於地面，供視覺或輕微互動用途，通常不可碰撞。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x2E",
+    "input": "位址：$D100 = 0x2E",
+    "output": "地面花朵（Pass-through ground flower）：放置於地面或地表附近的裝飾性花朵，通常可穿越。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x2F",
+    "input": "位址：$D100 = 0x2F",
+    "output": "分裂型物件：出現為單一實體，之後分裂成三個子物件，常見於特定關卡或事件。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x30",
+    "input": "位址：$D100 = 0x30",
+    "output": "地面快速移動物（Fast ground object）：沿地面高速移動的敵人或障礙，可能無法被一般攻擊消滅。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x31",
+    "input": "位址：$D100 = 0x31",
+    "output": "極速物體（Very fast object）：比 0x30 更快的移動物體，通常用於特定關卡段落。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x32",
+    "input": "位址：$D100 = 0x32",
+    "output": "Boss 觸發器／提示（Boss cue）：用於觸發或提示 Boss 出現的物件，行為依關卡情境而異。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x33",
+    "input": "位址：$D100 = 0x33",
+    "output": "翻轉型物件：具有翻轉（flip）動畫或行為的敵人/物件，翻轉後可能改變碰撞或移動方向。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x34",
+    "input": "位址：$D100 = 0x34",
+    "output": "可穿越左移星星：裝飾性或背景元素，向左移動，通常不與玩家互動。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x35",
+    "input": "位址：$D100 = 0x35",
+    "output": "下落物（Falling object）：從空中或上方區域掉落的物件，可能為障礙或收集物。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x36",
+    "input": "位址：$D100 = 0x36",
+    "output": "關卡結尾下落物：常出現在關卡終點或尾端的下落物件，可能作為結尾效果或障礙。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x37",
+    "input": "位址：$D100 = 0x37",
+    "output": "未知（未在原頁詳細說明），保留為未確定。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x38",
+    "input": "位址：$D100 = 0x38",
+    "output": "斜向右移動平台（Diagonal right-moving platform）：沿斜線向右移動的可站立平台。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x39",
+    "input": "位址：$D100 = 0x39",
+    "output": "斜向左移動平台（Diagonal left-moving platform）：沿斜線向左移動的可站立平台。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x3A",
+    "input": "位址：$D100 = 0x3A",
+    "output": "上下雙球平台（Vertical two-ball platform）：由兩顆球組成、上下移動的可站立平台。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x3B",
+    "input": "位址：$D100 = 0x3B",
+    "output": "左右雙球平台（Horizontal two-ball platform）：由兩顆球組成、左右移動的可站立平台。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x3C",
+    "input": "位址：$D100 = 0x3C",
+    "output": "跳躍敵人（Jumping enemy）：具有週期性跳躍行為的地面或小型敵人，可對玩家造成碰撞傷害。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x3D",
+    "input": "位址：$D100 = 0x3D",
+    "output": "3C（跳躍敵人）的死亡動畫或死亡狀態。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x3E",
+    "input": "位址：$D100 = 0x3E",
+    "output": "通用死亡音效（Death sound/effect）：用於多種類型敵人的死亡反饋。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x3F",
+    "input": "位址：$D100 = 0x3F",
+    "output": "Gao（Sphinx-like boss/enemy）：會朝 Mario 發射火球的斯芬克斯型敵人，具攻擊模式與耐久。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x40",
+    "input": "位址：$D100 = 0x40",
+    "output": "Gao 的死亡動畫：對應 0x3F 在被消滅時所觸發的動畫或效果。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x41",
+    "input": "位址：$D100 = 0x41",
+    "output": "死亡音效（對應 Gao / 3F / 40）：播放於 Gao 死亡或相關事件時的音效。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x42",
+    "input": "位址：$D100 = 0x42",
+    "output": "飛行蜜蜂（Flying Bee）：在空中有固定或追蹤軌跡的飛行敵人，接觸會造成傷害。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x43",
+    "input": "位址：$D100 = 0x43",
+    "output": "42 的死亡動畫：飛行蜜蜂被消滅時的視覺/音效反饋。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x44",
+    "input": "位址：$D100 = 0x44",
+    "output": "死亡音效（對應 42/43 的飛行蜜蜂死亡）。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x45",
+    "input": "位址：$D100 = 0x45",
+    "output": "落下箭矢（Falling arrow）：垂直或斜向落下的尖銳物件，接觸即傷害。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x46",
+    "input": "位址：$D100 = 0x46",
+    "output": "Nokobon 爆炸（Koopa explosion）：Nokobon 被消滅或觸發時的爆炸效果，可能生成碎片或投射物。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x47",
+    "input": "位址：$D100 = 0x47",
+    "output": "可站立的跳躍敵人：會週期性跳躍，玩家可以站在其上方，但觸碰側面或底部會受傷。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x48",
+    "input": "位址：$D100 = 0x48",
+    "output": "Boss 觸發物（triggers boss music and moving object）：用於啟動 Boss 戰階段並伴隨移動物件或平台。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x49",
+    "input": "位址：$D100 = 0x49",
+    "output": "管狀發射器的 Gira（pipe-fired shooter）：從管道或發射器中射出的敵人，類似小型炮手。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x4A",
+    "input": "位址：$D100 = 0x4A",
+    "output": "Gira / Bullet-like projectile：像 Bullet Bill 的投射敵，直線高速飛行並對碰撞造成傷害。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x4B",
+    "input": "位址：$D100 = 0x4B",
+    "output": "低位子彈（Low bullet）：接近地表飛行的高速投射物，擊中玩家則受傷。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x4C",
+    "input": "位址：$D100 = 0x4C",
+    "output": "關卡載具（end-level carrier）：會將 Mario 帶到關卡終點的移動物體，碰觸可載玩家至結尾。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x4D",
+    "input": "位址：$D100 = 0x4D",
+    "output": "自升型關卡載具：功能等同 0x4C，但會自動上升以移動 Mario 或改變關卡流程。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x4E",
+    "input": "位址：$D100 = 0x4E",
+    "output": "未知（原頁未提供明確描述），保留為未確定。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x4F",
+    "input": "位址：$D100 = 0x4F",
+    "output": "通用爆炸效果（Explosion）：用于多種類型敵人或物件爆炸的視覺/音效事件。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x50",
+    "input": "位址：$D100 = 0x50",
+    "output": "右斜向子彈（Diagonal-right projectile）：以斜線向右射出的投射物，快速且致命。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x51",
+    "input": "位址：$D100 = 0x51",
+    "output": "升起後落下的致命球：在固定位置升起再下落，與玩家接觸會造成傷害。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x52",
+    "input": "位址：$D100 = 0x52",
+    "output": "地面移動並回射子彈的物體：沿地面移動並有能力向玩家反射或射回彈道的敵人/裝置。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x53",
+    "input": "位址：$D100 = 0x53",
+    "output": "多向跳躍敵：會以非固定方向跳躍，移動路徑較不可預測的小型敵人。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x54",
+    "input": "位址：$D100 = 0x54",
+    "output": "環繞火球（circular orbit fireball）：沿圓形軌道運動的火球，常見於 Boss 或特殊障礙。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x55",
+    "input": "位址：$D100 = 0x55",
+    "output": "倒掛 Pakkun（Upside-down Piranha Plant）：倒吊於管道或天花板，會咬或伸出攻擊玩家。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x56",
+    "input": "位址：$D100 = 0x56",
+    "output": "Pionpi（未完全確認的敵人名）：原頁列名 Pionpi，但行為與外觀描述有限，標示為未確定特殊敵人。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x57",
+    "input": "位址：$D100 = 0x57",
+    "output": "Pionpi 變體：可能先以被擊敗/死亡外觀出現，之後會以跳躍行為活化。具體細節需原始程式碼或實機驗證。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x58",
+    "input": "位址：$D100 = 0x58",
+    "output": "低位快速火球：靠近地面的快速移動火球，威脅行走的玩家。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x59",
+    "input": "位址：$D100 = 0x59",
+    "output": "隱形觸發物（Invisible trigger）：不可見但會與 Mario 互動（例如使其跳起並給分 800），常用於隱藏點數或特效。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x5A",
+    "input": "位址：$D100 = 0x5A",
+    "output": "左斜向子彈（Diagonal-left projectile）：以斜線向左射出的投射物，對玩家構成威脅。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x5B",
+    "input": "位址：$D100 = 0x5B",
+    "output": "最終 Boss 觸發器（Final boss cue）：用於觸發或為最終 Boss 戰做準備的專用物件。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x5C",
+    "input": "位址：$D100 = 0x5C",
+    "output": "最終 Boss 火球爆炸（Final boss explosion）：最終 Boss 的爆炸效果，會噴出多枚火球作為二次攻擊。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x5D",
+    "input": "位址：$D100 = 0x5D",
+    "output": "最終 Boss 爆炸的上方火球（upper fireball）：由 0x5C 生成，軌跡位於上方。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x5E",
+    "input": "位址：$D100 = 0x5E",
+    "output": "最終 Boss 爆炸的中間火球（middle fireball）：生成於爆炸中心附近的火球，具有中等軌跡。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x5F",
+    "input": "位址：$D100 = 0x5F",
+    "output": "最終 Boss 爆炸的下方火球（lower fireball）：由爆炸產生，軌跡位於較低位置，接近地面。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x60",
+    "input": "位址：$D100 = 0x60",
+    "output": "最終 Boss 變體（faster variant）：與一般最終 Boss 類似，但出現時會使用不同音樂或更高速度行為。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x61",
+    "input": "位址：$D100 = 0x61",
+    "output": "未知 Boss 變體：原頁標示為另一種 Boss，但未給出完整行為細節，需要程式碼或實機驗證。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x62",
+    "input": "位址：$D100 = 0x62",
+    "output": "爆炸觸發器（explosion then final boss）：在爆炸效果後會召喚或切換到最終 Boss 場景的事件物件。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x63",
+    "input": "位址：$D100 = 0x63",
+    "output": "斜向左 Goomba（diagonal-left Goomba）：以斜向左路徑移動的 Goomba 類敵人，或與地圖圖塊互動相關的變體。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x64",
+    "input": "位址：$D100 = 0x64",
+    "output": "未明確描述（原頁引用零散），需額外驗證以確定此 ID 的具體行為或圖示。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x68",
+    "input": "位址：$D100 = 0x68",
+    "output": "會下落回復原位的物件：初始上升或延伸後會恢復原位，行為可用於陷阱或循環平台。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x69",
+    "input": "位址：$D100 = 0x69",
+    "output": "靜止型敵人（stationary enemy）：不移動但會致命的靜態物體，外觀可能類似 Goomba。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x6A",
+    "input": "位址：$D100 = 0x6A",
+    "output": "致命且會變換圖樣的物體：接觸即死，且其外觀會隨時間或條件隨機改變。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x6B",
+    "input": "位址：$D100 = 0x6B",
+    "output": "斜向移動物（diagonal-moving object）：以斜角方向移動的敵人或障礙，可能具有穿牆或變向行為。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x6C",
+    "input": "位址：$D100 = 0x6C",
+    "output": "地面跳躍敵（ground-hopping enemy）：會在地上跳躍並在一段時間或遭受攻擊後死亡，通常可被跳踏或攻擊消滅。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x6D",
+    "input": "位址：$D100 = 0x6D",
+    "output": "上升型觸發物：會上升並啟動 Boss 音樂或 Boss 階段，作為關卡事件入口。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x6E",
+    "input": "位址：$D100 = 0x6E",
+    "output": "靜止型變體：行為接近 0x69（靜止但致命），可能為不同圖像或屬性。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x6F",
+    "input": "位址：$D100 = 0x6F",
+    "output": "持續前進的跳躍敵（continuous-moving jumper）：類似 0x6C 但在被觸發後會持續向一方向移動而不停止。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x70",
+    "input": "位址：$D100 = 0x70",
+    "output": "靜止致命物（stationary lethal object）：不移動但接觸即死，常用於形成障礙或陷阱。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x71",
+    "input": "位址：$D100 = 0x71",
+    "output": "爆炸型靜止物：碰觸或受觸發時會爆炸並射出兩顆火球，造成群體或方向性傷害。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x72",
+    "input": "位址：$D100 = 0x72",
+    "output": "移動變體（variant of 0x6F）：行為接近 0x6F 的持續移動跳躍敵，可能速度或圖像不同。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x73",
+    "input": "位址：$D100 = 0x73",
+    "output": "爆炸型變體：類似 0x71，但可能在火球數量、方向或時機上有所不同。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x74",
+    "input": "位址：$D100 = 0x74",
+    "output": "另一種爆炸型變體：與 0x71 / 0x73 類似，行為細節需實機驗證以區分。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x75",
+    "input": "位址：$D100 = 0x75",
+    "output": "移動變體（variant of 0x72）：行為與 0x72 相近，可能為速度、圖樣或出現條件的差異。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x76",
+    "input": "位址：$D100 = 0x76",
+    "output": "致命變換物（variant of 0x6A）：會變換圖樣且接觸致命，可能在外觀或觸發條件上不同於 0x6A。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x77",
+    "input": "位址：$D100 = 0x77",
+    "output": "被觸發爆炸型靜止物：靜止但被跳踏或觸發後會死亡並射出火球，造成連鎖威脅。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x78",
+    "input": "位址：$D100 = 0x78",
+    "output": "持續跳躍變體（variant of 0x6F）：會持續移動並跳躍的敵人，為 0x6F 的另一版本。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x79",
+    "input": "位址：$D100 = 0x79",
+    "output": "Boss 音樂觸發且致命的物體：會啟動 Boss 音樂，且直接接觸會造成致死效果，常用於關卡門檻或障礙。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x7A",
+    "input": "位址：$D100 = 0x7A",
+    "output": "靜止危險物（stationary hazard）：不會移動但會對玩家造成傷害，可能為陷阱或刺狀物。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x7B",
+    "input": "位址：$D100 = 0x7B",
+    "output": "慢速變體（slower variant of 0x6F）：行為與 0x6F 類似但速度較慢或移動頻率降低。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x7C",
+    "input": "位址：$D100 = 0x7C",
+    "output": "靜止物（static object）：完全靜止，主要作為裝飾或不互動的場景元素。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x7D",
+    "input": "位址：$D100 = 0x7D",
+    "output": "變換致命物（variant of 0x6A）：另一個會變換圖樣且接觸致命的項目，具變體差異。"
+  },
+  {
+    "instruction": "Enemy/Object data 0x7E",
+    "input": "位址：$D100 = 0x7E",
+    "output": "靜態物件（static object）：通常為場景擺設或靜止危險物，具體功能依關卡設定而異。"
+  },
+  {
+    "instruction": "解釋 Super Mario Land 中記憶體位址 0xD101 的意義。",
+    "input": "位址：$D101",
+    "output": "0xD101 是目前物件（通常為第一個敵人或互動物件）的 HP（生命值/耐久度）。數值越高代表該物件越耐打或有更多生命階段。許多敵人（如 Nokobon / Boss）會用這個值來追蹤剩餘生命，當降到 0 時觸發死亡動畫或消失。"
+  },
+  {
+    "instruction": "當物件 HP 降到 0 時，會發生什麼？",
+    "input": "位址：$D101 = 0x00",
+    "output": "當 0xD101（物件 HP）降到 0 時，該物件會進入死亡狀態：觸發死亡動畫、播放音效、可能產生粒子效果或分數加成，並從畫面移除。同時相關的敵人 ID（0xD100）可能被重設或切換。"
+  },
+  {
+    "instruction": "解釋 Super Mario Land 中記憶體位址 0xD102 的意義。",
+    "input": "位址：$D102",
+    "output": "0xD102 是目前物件的 Y 座標（相對於畫面）。數值越大代表物件越靠畫面下方（接近地面），數值越小代表越靠上方。這是用來計算物件與 Mario 的垂直碰撞、跳躍攻擊判斷或掉出畫面處理。"
+  },
+  {
+    "instruction": "解釋 Super Mario Land 中記憶體位址 0xD103 的意義。",
+    "input": "位址：$D103",
+    "output": "0xD103 是目前物件的 X 座標（相對於畫面，並會隨畫面捲動自動調整）。數值越大代表物件越靠右側。這是追蹤物件水平位置的核心位址，用於碰撞檢測、敵人追蹤 Mario 或平台移動計算。"
+  },
+  {
+    "instruction": "物件的 X 和 Y 座標分別存在哪裡？",
+    "input": "物件位置相關",
+    "output": "物件的 Y 座標在 0xD102，X 座標在 0xD103。這兩個值都是相對於目前畫面（screen-relative），會隨螢幕捲動自動調整，用來即時判斷物件與 Mario 或其他物件的相對位置。"
+  },
+  {
+    "instruction": "解釋 Super Mario Land 中記憶體位址 0xD106 的意義。",
+    "input": "位址：$D106",
+    "output": "0xD106 是目前物件的 sprite pose（精靈姿勢 / 圖像幀索引）。這個值決定物件當前顯示的圖像或動畫幀，例如 Goomba 的走路姿勢、扁平狀態、Boss 的攻擊姿態等。數值變化會觸發不同外觀或動畫循環。"
+  },
+  {
+    "instruction": "當物件 sprite pose 變化時，代表什麼？",
+    "input": "位址：$D106 數值改變",
+    "output": "0xD106（sprite pose）變化時，通常代表物件進入新動作狀態，例如從走路變成被踩扁、從靜止變成攻擊、或死亡動畫開始。這會直接影響畫面上顯示的圖像和碰撞框。"
+  },
+  {
+    "instruction": "解釋 Super Mario Land 中記憶體位址 0xD108 的意義。",
+    "input": "位址：$D108",
+    "output": "0xD108 是目前物件的 motion/animation timer（運動或動畫計時器）。這個計時器用來控制物件的移動頻率、動畫切換間隔或攻擊週期。例如每隔幾幀才前進一步、或每幾秒發射一次火球。數值遞減或循環用來驅動行為。"
+  },
+  {
+    "instruction": "物件動畫或移動太快/太慢，可能與哪個位址有關？",
+    "input": "位址：$D108",
+    "output": "物件的運動或動畫速度異常，通常與 0xD108（motion/animation timer）有關。如果這個計時器被修改或凍結，物件可能會卡住、加速移動、或動畫不更新。"
+  },
+  {
+    "instruction": "把以下 disassembly 註解翻譯成自然語言說明",
+    "input": "LDA $D101   ; object HP\nLDA $D102   ; object Y pos\nLDA $D103   ; object X pos",
+    "output": "從 0xD101 讀取物件的 HP（生命值），從 0xD102 讀取 Y 座標，從 0xD103 讀取 X 座標。這三個位址組成物件的核心狀態，用於碰撞、傷害計算和位置追蹤。"
+  },
+  {
+    "instruction": "物件的完整狀態通常包含哪些連續位址？",
+    "input": "物件資料結構",
+    "output": "一個典型物件槽會包含：0xD100（ID/類型）、0xD101（HP）、0xD102（Y pos）、0xD103（X pos）、0xD106（sprite pose）、0xD108（motion/animation timer）等。這些位址連續儲存，用來完整描述畫面上一個敵人或互動物件的狀態。"
+  },
+  {
+    "instruction": "當 Mario 靠近敵人時，哪些位址會被頻繁讀取或更新？",
+    "input": "碰撞與追蹤相關",
+    "output": "主要會讀取/更新 0xD103（物件 X pos）、0xD102（物件 Y pos）、0xD101（HP，如果發生攻擊）、0xD106（pose，如果觸發動畫）、以及 0xD108（timer，控制移動或攻擊時機）。同時比對 Mario 的 0xC202 / 0xC201 來判斷碰撞。"
+  },
+  {
+    "instruction": "解釋 Super Mario Land 中記憶體位址 0xC201 的意義。",
+    "input": "位址：$C201",
+    "output": "0xC201 是 Mario 的 Y 座標（相對於畫面）。數值越高代表 Mario 越靠畫面上方，數值越低代表越靠近畫面底部（接近掉坑危險區）。這是即時位置，用來判斷 Mario 是否即將掉出畫面或觸發 pit death。"
+  },
+  {
+    "instruction": "解釋 Super Mario Land 中記憶體位址 0xC202 的意義。",
+    "input": "位址：$C202",
+    "output": "0xC202 是 Mario 的 X 座標（相對於畫面）。數值越大代表 Mario 越靠畫面右側，數值越小代表越靠左側。這是用來追蹤 Mario 水平位置的主要位址，常用於碰撞檢測、進度計算和敵人互動。"
+  },
+  {
+    "instruction": "當 Mario 的 Y 座標很低時，會發生什麼？",
+    "input": "位址：$C201 數值接近 0",
+    "output": "當 0xC201（Mario Y 座標）數值很低（接近畫面底部）時，代表 Mario 即將掉出畫面。此時遊戲會觸發 pit death，把 0xFFA6 設為 0x90 開始重生倒數。"
+  },
+  {
+    "instruction": "給定 Mario 位置，預測是否接近死亡邊界",
+    "input": "$C201 = 低值 且 $C202 = 任意",
+    "output": "Y 座標（0xC201）過低時，Mario 處於高風險狀態，隨時可能掉進無底洞（pit death），遊戲會立即將 0xFFA6 設為 0x90 啟動重生計時器。"
+  },
+  {
+    "instruction": "Mario 的 X 和 Y 座標分別存在哪個位址？",
+    "input": "玩家位置相關",
+    "output": "X 座標在 0xC202，Y 座標在 0xC201。這兩個都是 8-bit 值，相對於目前畫面（screen-relative），用來即時追蹤 Mario 在螢幕上的位置。"
+  },
+  {
+    "instruction": "把以下 disassembly 註解翻譯成自然語言說明",
+    "input": "LDA $C202   ; Mario X pos\nLDA $C201   ; Mario Y pos",
+    "output": "從記憶體 0xC202 讀取 Mario 的 X 座標，從 0xC201 讀取 Y 座標。這兩個位址儲存的是 Mario 相對於畫面的即時位置，用於碰撞、掉坑判斷等核心邏輯。"
+  },
+  {
+    "instruction": "Mario 掉到畫面底部時，哪兩個位址會參與判斷？",
+    "input": "pit death 相關",
+    "output": "主要看 0xC201（Y 座標）是否過低。一旦 Y 座標太低，遊戲就會把 0xFFA6 設為 0x90 觸發死亡重生計時器。"
+  },
+  {
+    "instruction": "解釋 Super Mario Land 中記憶體位址 0xC201 和 0xC202 的組合意義。",
+    "input": "位址：$C201 (Y) 和 $C202 (X)",
+    "output": "這兩個位址共同組成 Mario 的畫面相對位置（X, Y）。在 MarioEnv 中，這兩個值直接用來觀測 Mario 是否接近畫面邊界、是否即將掉坑，以及計算進度與碰撞。數值範圍通常 0~255（實際畫面範圍更小）。"
+  }
+]
